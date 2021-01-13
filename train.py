@@ -18,6 +18,7 @@ from utils.preprocessing import Discretizer, Normalizer
 from utils import metrics
 from utils import common_utils
 from model import StageNet
+#from model_pyhealth import StageNet
 
 
 def parse_arguments(parser):
@@ -37,16 +38,16 @@ def parse_arguments(parser):
         "--small_part", type=int, default=0, help="Use part of training data"
     )
     parser.add_argument(
-        "--batch_size", type=int, default=128, help="Training batch size"
+        "--batch_size", type=int, default=256, help="Training batch size"
     )
-    parser.add_argument("--epochs", type=int, default=50, help="Training epochs")
+    parser.add_argument("--epochs", type=int, default=10, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learing rate")
 
     parser.add_argument(
         "--input_dim", type=int, default=76, help="Dimension of visit record data"
     )
     parser.add_argument(
-        "--rnn_dim", type=int, default=384, help="Dimension of hidden units in RNN"
+        "--hidden_dim", type=int, default=384, help="Dimension of hidden units in RNN"
     )
     parser.add_argument(
         "--output_dim", type=int, default=1, help="Dimension of prediction target"
@@ -96,12 +97,14 @@ if __name__ == "__main__":
             i for (i, x) in enumerate(discretizer_header) if x.find("->") == -1
         ]
 
-        normalizer = Normalizer(fields=cont_channels)
+        
         normalizer_state = "decomp_normalizer"
         normalizer_state = os.path.join(
             os.path.dirname(args.data_path), normalizer_state
         )
+        normalizer = Normalizer(fields=cont_channels)
         normalizer.load_params(normalizer_state)
+        
 
         test_data_loader = common_utils.DeepSupervisionDataLoader(
             dataset_dir=os.path.join(args.data_path, "test"),
@@ -223,9 +226,7 @@ if __name__ == "__main__":
 
         normalizer = Normalizer(fields=cont_channels)
         normalizer_state = "decomp_normalizer"
-        normalizer_state = os.path.join(
-            os.path.dirname(args.data_path), normalizer_state
-        )
+        normalizer_state = os.path.join(args.data_path, normalizer_state)
         normalizer.load_params(normalizer_state)
 
         train_data_gen = utils.BatchGenDeepSupervision(
@@ -252,7 +253,7 @@ if __name__ == "__main__":
 
         model = StageNet(
             args.input_dim + 17,
-            args.rnn_dim,
+            args.hidden_dim,
             args.K,
             args.output_dim,
             args.chunk_level,
@@ -403,8 +404,6 @@ if __name__ == "__main__":
                 valid_pred = np.array(valid_pred)
                 valid_pred = np.stack([1 - valid_pred, valid_pred], axis=1)
                 ret = metrics.print_metrics_binary(valid_true, valid_pred)
-                print()
-
                 cur_auprc = ret["auprc"]
                 if cur_auprc > max_auprc:
                     max_auprc = cur_auprc

@@ -16,9 +16,16 @@ def preprocess_chunk(data, ts, discretizer, normalizer=None):
 
 
 class BatchGen(object):
-
-    def __init__(self, reader, discretizer, normalizer,
-                 batch_size, steps, shuffle, return_names=False):
+    def __init__(
+        self,
+        reader,
+        discretizer,
+        normalizer,
+        batch_size,
+        steps,
+        shuffle,
+        return_names=False,
+    ):
         self.reader = reader
         self.discretizer = discretizer
         self.normalizer = normalizer
@@ -54,13 +61,15 @@ class BatchGen(object):
                 names = ret["name"]
 
                 Xs = preprocess_chunk(Xs, ts, self.discretizer, self.normalizer)
-                (Xs, ys, ts, names) = common_utils.sort_and_shuffle([Xs, ys, ts, names], B)
+                (Xs, ys, ts, names) = common_utils.sort_and_shuffle(
+                    [Xs, ys, ts, names], B
+                )
 
                 for i in range(0, current_size, B):
-                    X = common_utils.pad_zeros(Xs[i:i + B])
-                    y = np.array(ys[i:i + B])
-                    batch_names = names[i:i+B]
-                    batch_ts = ts[i:i+B]
+                    X = common_utils.pad_zeros(Xs[i : i + B])
+                    y = np.array(ys[i : i + B])
+                    batch_names = names[i : i + B]
+                    batch_ts = ts[i : i + B]
                     batch_data = (X, y)
                     if not self.return_names:
                         yield batch_data
@@ -79,9 +88,15 @@ class BatchGen(object):
 
 
 class BatchGenDeepSupervision(object):
-
-    def __init__(self, dataloader, discretizer, normalizer,
-                 batch_size, shuffle, return_names=False):
+    def __init__(
+        self,
+        dataloader,
+        discretizer,
+        normalizer,
+        batch_size,
+        shuffle,
+        return_names=False,
+    ):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.return_names = return_names
@@ -147,7 +162,7 @@ class BatchGenDeepSupervision(object):
                 N = len(self.data[1])
                 order = list(range(N))
                 random.shuffle(order)
-                tmp_data = [[[None]*N, [None]*N], [None]*N]
+                tmp_data = [[[None] * N, [None] * N], [None] * N]
                 tmp_names = [None] * N
                 tmp_ts = [None] * N
                 for i in range(N):
@@ -164,16 +179,17 @@ class BatchGenDeepSupervision(object):
                 Xs = self.data[0][0]
                 masks = self.data[0][1]
                 ys = self.data[1]
-                (Xs, masks, ys, self.names, self.ts) = common_utils.sort_and_shuffle([Xs, masks, ys,
-                                                                                      self.names, self.ts], B)
+                (Xs, masks, ys, self.names, self.ts) = common_utils.sort_and_shuffle(
+                    [Xs, masks, ys, self.names, self.ts], B
+                )
                 self.data = [[Xs, masks], ys]
 
             for i in range(0, len(self.data[1]), B):
-                X = self.data[0][0][i:i + B]
-                mask = self.data[0][1][i:i + B]
-                y = self.data[1][i:i + B]
-                names = self.names[i:i + B]
-                ts = self.ts[i:i + B]
+                X = self.data[0][0][i : i + B]
+                mask = self.data[0][1][i : i + B]
+                y = self.data[1][i : i + B]
+                names = self.names[i : i + B]
+                ts = self.ts[i : i + B]
 
                 X = common_utils.pad_zeros(X)  # (B, T, D)
                 mask = common_utils.pad_zeros(mask)  # (B, T)
@@ -198,7 +214,7 @@ class BatchGenDeepSupervision(object):
 
 def save_results(names, ts, pred, y_true, path):
     common_utils.create_directory(os.path.dirname(path))
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         f.write("stay,period_length,prediction,y_true\n")
         for (name, t, x, y) in zip(names, ts, pred, y_true):
             f.write("{},{:.6f},{:.6f},{}\n".format(name, t, x, y))
