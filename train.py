@@ -3,7 +3,7 @@ import argparse
 import os
 import random
 
-RANDOM_SEED = 12345
+RANDOM_SEED = 1
 np.random.seed(RANDOM_SEED)
 random.seed(RANDOM_SEED)
 
@@ -18,7 +18,6 @@ from utils.preprocessing import Discretizer, Normalizer
 from utils import metrics
 from utils import common_utils
 from model import StageNet
-#from model_pyhealth import StageNet
 
 
 def parse_arguments(parser):
@@ -252,6 +251,7 @@ if __name__ == "__main__":
         print("available device: {}".format(device))
 
         model = StageNet(
+            # 17 denotes the # of physiologic variables at each visit
             args.input_dim + 17,
             args.hidden_dim,
             args.K,
