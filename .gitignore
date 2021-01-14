@@ -2,7 +2,7 @@
 data/
 pd-test.py
 test.ipynb
-saved_weigts/
+saved_weights/
 tmp.py
 # macos
 .DS_Store
