@@ -123,22 +123,24 @@ class BatchGenDeepSupervision(object):
 
         for i in range(N):
             X = dataloader._data["X"][i]
-            cur_ts = dataloader._data["ts"][i]
-            cur_ys = dataloader._data["ys"][i]
+            current_t = dataloader._data["ts"][i]
+            current_y = dataloader._data["ys"][i]
             name = dataloader._data["name"][i]
 
-            cur_ys = [int(x) for x in cur_ys]
+            current_y = [int(x) for x in current_y]
 
-            T = max(cur_ts)
+            T = max(current_t)
             nsteps = get_bin(T) + 1
+            # mask: label time slides with non-zero data?
             mask = [0] * nsteps
             y = [0] * nsteps
 
-            for pos, z in zip(cur_ts, cur_ys):
+            for pos, z in zip(current_t, current_y):
                 mask[get_bin(pos)] = 1
                 y[get_bin(pos)] = z
-
-            X = discretizer.transform(X, end=T)[0]
+            # missing data is imputated?!
+            # what's the point of nsteps here and the bins within the discretizer.transform()?
+            X = discretizer.transform(X, end=T)
             if normalizer is not None:
                 X = normalizer.transform(X)
 
@@ -146,7 +148,7 @@ class BatchGenDeepSupervision(object):
             masks.append(np.array(mask))
             ys.append(np.array(y))
             names.append(name)
-            ts.append(cur_ts)
+            ts.append(current_t)
 
             assert np.sum(mask) > 0
             assert len(X) == len(mask) and len(X) == len(y)
@@ -159,6 +161,7 @@ class BatchGenDeepSupervision(object):
         B = self.batch_size
         while True:
             if self.shuffle:
+                # stupid shuffle
                 N = len(self.data[1])
                 order = list(range(N))
                 random.shuffle(order)

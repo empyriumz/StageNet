@@ -35,12 +35,33 @@ class Discretizer:
         self._store_masks = store_masks
         self._start_time = start_time
         self._impute_strategy = impute_strategy
-
+        self.vector_len, self.code_pos = self._get_code_info()
         # for statistics
         self._done_count = 0
         self._empty_bins_sum = 0
         self._unused_data_sum = 0
+    
+    def _get_code_info(self):
+        """determine how long will the clinical feature vector be and 
+        the starting column index for writing each columns in the data matrix
 
+        Returns:
+            [type]: [description]
+        """        
+        N_channels = len(self._id_to_channel)
+        vec_len = 0
+        begin_pos = [0] * N_channels
+        end_pos = [0] * N_channels
+        for i in range(N_channels):
+            channel = self._id_to_channel[i]
+            begin_pos[i] = vec_len
+            if self._is_categorical_channel[channel]:
+                end_pos[i] = begin_pos[i] + len(self._possible_values[channel])
+            else:
+                end_pos[i] = begin_pos[i] + 1
+            vec_len = end_pos[i]
+        return vec_len, begin_pos
+        
     def transform(self, X, header=None, end=None):
         if header is None:
             header = self._header
@@ -66,25 +87,15 @@ class Discretizer:
 
         N_bins = int(max_hours / self._timestep + 1.0 - eps)
 
-        cur_len = 0
-        begin_pos = [0 for i in range(N_channels)]
-        end_pos = [0 for i in range(N_channels)]
-        for i in range(N_channels):
-            channel = self._id_to_channel[i]
-            begin_pos[i] = cur_len
-            if self._is_categorical_channel[channel]:
-                end_pos[i] = begin_pos[i] + len(self._possible_values[channel])
-            else:
-                end_pos[i] = begin_pos[i] + 1
-            cur_len = end_pos[i]
-
-        data = np.zeros(shape=(N_bins, cur_len), dtype=float)
+        # record all data, both categorical and continous variables into one matrix "data"
+        data = np.zeros(shape=(N_bins, self.vector_len), dtype=float)
+        # mask: denote which column has non-zero data for each bin??
         mask = np.zeros(shape=(N_bins, N_channels), dtype=int)
-        original_value = [["" for j in range(N_channels)] for i in range(N_bins)]
+        original_value = [["" for _ in range(N_channels)] for _ in range(N_bins)]
         total_data = 0
         unused_data = 0
 
-        def write(data, bin_id, channel, value, begin_pos):
+        def write(data, bin_id, channel, value):
             channel_id = self._channel_to_id[channel]
             if self._is_categorical_channel[channel]:
                 category_id = self._possible_values[channel].index(value)
@@ -92,9 +103,9 @@ class Discretizer:
                 one_hot = np.zeros((N_values,))
                 one_hot[category_id] = 1
                 for pos in range(N_values):
-                    data[bin_id, begin_pos[channel_id] + pos] = one_hot[pos]
+                    data[bin_id, self.code_pos[channel_id] + pos] = one_hot[pos]
             else:
-                data[bin_id, begin_pos[channel_id]] = float(value)
+                data[bin_id, self.code_pos[channel_id]] = float(value)
 
         for row in X:
             t = float(row[0]) - first_time
@@ -112,18 +123,18 @@ class Discretizer:
                 total_data += 1
                 if mask[bin_id][channel_id] == 1:
                     unused_data += 1
+                # record position with non-zero data
                 mask[bin_id][channel_id] = 1
 
-                write(data, bin_id, channel, row[j], begin_pos)
+                write(data, bin_id, channel, row[j])
                 original_value[bin_id][channel_id] = row[j]
 
         # impute missing values
-
         if self._impute_strategy not in ["zero", "normal_value", "previous", "next"]:
             raise ValueError("impute strategy is invalid")
 
         if self._impute_strategy in ["normal_value", "previous"]:
-            prev_values = [[] for i in range(len(self._id_to_channel))]
+            prev_values = [[] for _ in range(len(self._id_to_channel))]
             for bin_id in range(N_bins):
                 for channel in self._id_to_channel:
                     channel_id = self._channel_to_id[channel]
@@ -139,10 +150,10 @@ class Discretizer:
                             imputed_value = self._normal_values[channel]
                         else:
                             imputed_value = prev_values[channel_id][-1]
-                    write(data, bin_id, channel, imputed_value, begin_pos)
+                    write(data, bin_id, channel, imputed_value)
 
         if self._impute_strategy == "next":
-            prev_values = [[] for i in range(len(self._id_to_channel))]
+            prev_values = [[] for _ in range(len(self._id_to_channel))]
             for bin_id in range(N_bins - 1, -1, -1):
                 for channel in self._id_to_channel:
                     channel_id = self._channel_to_id[channel]
@@ -155,7 +166,7 @@ class Discretizer:
                         imputed_value = self._normal_values[channel]
                     else:
                         imputed_value = prev_values[channel_id][-1]
-                    write(data, bin_id, channel, imputed_value, begin_pos)
+                    write(data, bin_id, channel, imputed_value)
 
         empty_bins = np.sum([1 - min(1, np.sum(mask[i, :])) for i in range(N_bins)])
         self._done_count += 1
@@ -164,26 +175,26 @@ class Discretizer:
 
         if self._store_masks:
             data = np.hstack([data, mask.astype(np.float32)])
+        return data
 
-        # create new header
-        new_header = []
+    def create_header(self):
+        header = []
         for channel in self._id_to_channel:
             if self._is_categorical_channel[channel]:
                 values = self._possible_values[channel]
                 for value in values:
-                    new_header.append(channel + "->" + value)
+                    header.append(channel + "->" + value)
             else:
-                new_header.append(channel)
+                header.append(channel)
 
         if self._store_masks:
             for i in range(len(self._id_to_channel)):
                 channel = self._id_to_channel[i]
-                new_header.append("mask->" + channel)
+                header.append("mask->" + channel)
 
-        new_header = ",".join(new_header)
-
-        return (data, new_header)
-
+        header = ",".join(header)
+        return header
+        
     def print_statistics(self):
         print("statistics of discretizer:")
         print("\tconverted {} examples".format(self._done_count))

@@ -74,7 +74,7 @@ class StageNet(nn.Module):
     def step(self, inputs, c_last, h_last, interval):
         x_in = inputs
 
-        # Integrate inter-visit time intervals
+        # Integrate inter-visit time intervals?
         interval = interval.unsqueeze(-1)
         x_out1 = self.kernel(torch.cat((x_in, interval), dim=-1))
         x_out2 = self.recurrent_kernel(torch.cat((h_last, interval), dim=-1))
@@ -127,7 +127,7 @@ class StageNet(nn.Module):
             cur_distance = 1 - torch.mean(
                 out[..., self.hidden_dim : self.hidden_dim + self.levels], -1
             )
-            cur_distance_in = torch.mean(out[..., self.hidden_dim + self.levels :], -1)
+            #cur_distance_in = torch.mean(out[..., self.hidden_dim + self.levels :], -1)
             origin_h.append(out[..., : self.hidden_dim])
             tmp_h = torch.cat((tmp_h[1:], out[..., : self.hidden_dim].unsqueeze(0)), 0)
             tmp_dis = torch.cat((tmp_dis[1:], cur_distance.unsqueeze(0)), 0)

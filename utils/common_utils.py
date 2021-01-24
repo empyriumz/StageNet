@@ -5,13 +5,14 @@ import numpy as np
 import os
 import json
 import random
+import pandas as pd
 
 from .feature_extractor import extract_features
 
 
 def convert_to_dict(data, header, channel_info):
     """ convert data from readers output in to array of arrays format """
-    ret = [[] for i in range(data.shape[1] - 1)]
+    ret = [[] for _ in range(data.shape[1] - 1)]
     for i in range(1, data.shape[1]):
         ret[i - 1] = [(t, x) for (t, x) in zip(data[:, 0], data[:, i]) if x != ""]
         channel = header[i]
@@ -165,7 +166,7 @@ class DeepSupervisionDataLoader:
                 cur_labels.append(self._data[j][2])
                 j += 1
 
-            cur_X, header = self._read_timeseries(cur_stay)
+            cur_X = self._read_timeseries(cur_stay)
             mas["X"].append(cur_X)
             mas["ts"].append(cur_ts)
             mas["ys"].append(cur_labels)
@@ -185,9 +186,42 @@ class DeepSupervisionDataLoader:
             for line in tsfile:
                 mas = line.strip().split(",")
                 ret.append(np.array(mas))
-        return (np.stack(ret), header)
+        return np.stack(ret)
 
+class DataLoader:
+    r"""
+    Data loader for decompensation task.
+    Reads all the data for one patient at once.
 
+    Parameters
+    ----------
+    dataset_dir : str
+        Directory where timeseries files are stored.
+    listfile : str
+        Path to a listfile. If this parameter is left `None` then
+        `dataset_dir/listfile.csv` will be used.
+    """
+
+    def __init__(self, dataset_dir, listfile=None):
+        self._dataset_dir = dataset_dir
+        if listfile is None:
+            listfile_path = os.path.join(dataset_dir, "listfile.csv")
+        else:
+            listfile_path = listfile
+        df = pd.read_csv(listfile_path)
+        df = df.sort_values(by=['stay', 'period_length'])
+        group = df.groupby('stay').agg(list)
+        
+        mas = {"X": [], "ts": [], "ys": [], "name": []}
+        mas['name'] = list(group.index)
+        mas["ys"] = group['y_true']
+        mas["ts"] = group['period_length']
+        for file_name in mas['name']:
+            tmp_df = pd.read_csv(self._dataset_dir+"/"+file_name)
+            current_X = tmp_df.to_numpy()
+            mas["X"].append(current_X)
+        self._data = mas
+            
 def create_directory(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
