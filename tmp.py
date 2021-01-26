@@ -76,7 +76,12 @@ if __name__ == "__main__":
 
     if args.test_mode == 1:
         print("Preparing test data ... ")
-        
+
+        train_data_loader = common_utils.DeepSupervisionDataLoader(
+            dataset_dir=os.path.join(args.data_path, "train"),
+            listfile=os.path.join(args.data_path, "train_listfile.csv"),
+            small_part=True,
+        )
         discretizer = Discretizer(
             timestep=1.0,
             store_masks=True,
@@ -84,10 +89,13 @@ if __name__ == "__main__":
             start_time="zero",
         )
 
-        discretizer_header = discretizer.create_header().split(",")
+        discretizer_header = discretizer.transform(train_data_loader._data["X"][0])[
+            1
+        ].split(",")
         cont_channels = [
             i for (i, x) in enumerate(discretizer_header) if x.find("->") == -1
         ]
+
         
         normalizer_state = "decomp_normalizer"
         normalizer_state = os.path.join(
@@ -404,95 +412,3 @@ if __name__ == "__main__":
                     }
                     torch.save(state, file_name)
                     print("\n------------ Save best model ------------\n")
-
-        """Evaluate phase"""
-        print("Testing model ... ")
-
-        checkpoint = torch.load(file_name)
-        save_chunk = checkpoint["chunk"]
-        print("last saved model is in chunk {}".format(save_chunk))
-        model.load_state_dict(checkpoint["net"])
-        optimizer.load_state_dict(checkpoint["optimizer"])
-        model.eval()
-
-        test_data_loader = common_utils.DeepSupervisionDataLoader(
-            dataset_dir=os.path.join(args.data_path, "test"),
-            listfile=os.path.join(args.data_path, "test_listfile.csv"),
-            small_part=args.small_part,
-        )
-        test_data_gen = utils.BatchGenDeepSupervision(
-            test_data_loader,
-            discretizer,
-            normalizer,
-            args.batch_size,
-            shuffle=False,
-            return_names=True,
-        )
-
-        with torch.no_grad():
-            torch.manual_seed(RANDOM_SEED)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(RANDOM_SEED)
-
-            cur_test_loss = []
-            test_true = []
-            test_pred = []
-
-            for each_batch in range(test_data_gen.steps):
-                test_data = next(test_data_gen)
-                test_name = test_data["names"]
-                test_data = test_data["data"]
-
-                test_x = torch.tensor(test_data[0][0], dtype=torch.float32).to(device)
-                test_mask = (
-                    torch.tensor(test_data[0][1], dtype=torch.float32)
-                    .unsqueeze(-1)
-                    .to(device)
-                )
-                test_y = torch.tensor(test_data[1], dtype=torch.float32).to(device)
-                tmp = torch.zeros(test_x.size(0), 17, dtype=torch.float32).to(device)
-                test_interval = torch.zeros(
-                    (test_x.size(0), test_x.size(1), 17), dtype=torch.float32
-                ).to(device)
-
-                for i in range(test_x.size(1)):
-                    cur_ind = test_x[:, i, -17:]
-                    tmp += (cur_ind == 0).float()
-                    test_interval[:, i, :] = cur_ind * tmp
-                    tmp[cur_ind == 1] = 0
-
-                if test_mask.size()[1] > 400:
-                    test_x = test_x[:, :400, :]
-                    test_mask = test_mask[:, :400, :]
-                    test_y = test_y[:, :400, :]
-                    test_interval = test_interval[:, :400, :]
-
-                test_x = torch.cat((test_x, test_interval), dim=-1)
-                test_time = torch.ones(
-                    (test_x.size(0), test_x.size(1)), dtype=torch.float32
-                ).to(device)
-
-                test_output, test_dis = model(test_x, test_time, device)
-                masked_test_output = test_output * test_mask
-
-                test_loss = test_y * torch.log(masked_test_output + 1e-7) + (
-                    1 - test_y
-                ) * torch.log(1 - masked_test_output + 1e-7)
-                test_loss = torch.sum(test_loss, dim=1) / torch.sum(test_mask, dim=1)
-                test_loss = torch.neg(torch.sum(test_loss))
-                cur_test_loss.append(test_loss.cpu().detach().numpy())
-
-                for m, t, p in zip(
-                    test_mask.cpu().numpy().flatten(),
-                    test_y.cpu().numpy().flatten(),
-                    test_output.cpu().detach().numpy().flatten(),
-                ):
-                    if np.equal(m, 1):
-                        test_true.append(t)
-                        test_pred.append(p)
-
-            print("Test loss = %.4f" % (np.mean(np.array(cur_test_loss))))
-            print("\n")
-            test_pred = np.array(test_pred)
-            test_pred = np.stack([1 - test_pred, test_pred], axis=1)
-            test_ret = metrics.print_metrics_binary(test_true, test_pred)
