@@ -1,15 +1,10 @@
 import torch
 from torch import nn
-import torch.nn.utils.rnn as rnn_utils
-from torch.utils import data
-from torch.autograd import Variable
-import torch.nn.functional as F
 
 RANDOM_SEED = 12345
 torch.manual_seed(RANDOM_SEED)
 torch.cuda.manual_seed(RANDOM_SEED)
 torch.backends.cudnn.deterministic = True
-
 
 class StageNet(nn.Module):
     def __init__(
