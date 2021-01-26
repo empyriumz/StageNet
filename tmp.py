@@ -73,11 +73,6 @@ if __name__ == "__main__":
 
     """ Prepare training data"""
     print("Preparing training data ... ")
-    # train_data_loader = common_utils.DeepSupervisionDataLoader(
-    #     dataset_dir=os.path.join(args.data_path, "train"),
-    #     listfile=os.path.join(args.data_path, "train_listfile.csv"),
-    #     small_part=args.small_part,
-    # )
     train_data_loader = common_utils.DeepSupervisionDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
         listfile=os.path.join(args.data_path, "demo-list.csv"),
@@ -129,9 +124,7 @@ if __name__ == "__main__":
     print("available device: {}".format(device))
 
     model = StageNet(
-        # 17 denotes the # of physiologic variables at each visit
-        # WTF
-        args.input_dim + 17,
+        args.input_dim,
         args.hidden_dim,
         args.K,
         args.output_dim,
@@ -189,13 +182,8 @@ if __name__ == "__main__":
                 batch_y = batch_y[:, :400, :]
                 batch_interval = batch_interval[:, :400, :]
 
-            batch_x = torch.cat((batch_x, batch_interval), dim=-1)
-            batch_time = torch.ones(
-                (batch_x.size(0), batch_x.size(1)), dtype=torch.float32
-            ).to(device)
-
             optimizer.zero_grad()
-            cur_output, _ = model(batch_x, batch_time, device)
+            cur_output, _ = model(batch_x, batch_interval, device)
             masked_output = cur_output * batch_mask
             loss = batch_y * torch.log(masked_output + 1e-7) + (
                 1 - batch_y
@@ -251,12 +239,7 @@ if __name__ == "__main__":
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
 
-                valid_x = torch.cat((valid_x, valid_interval), dim=-1)
-                valid_time = torch.ones(
-                    (valid_x.size(0), valid_x.size(1)), dtype=torch.float32
-                ).to(device)
-
-                valid_output, valid_dis = model(valid_x, valid_time, device)
+                valid_output, valid_dis = model(valid_x, valid_interval, device)
                 masked_valid_output = valid_output * valid_mask
 
                 valid_loss = valid_y * torch.log(masked_valid_output + 1e-7) + (
