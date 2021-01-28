@@ -1,15 +1,10 @@
 import torch
 from torch import nn
-import torch.nn.utils.rnn as rnn_utils
-from torch.utils import data
-from torch.autograd import Variable
-import torch.nn.functional as F
 
 RANDOM_SEED = 12345
 torch.manual_seed(RANDOM_SEED)
 torch.cuda.manual_seed(RANDOM_SEED)
 torch.backends.cudnn.deterministic = True
-
 
 class StageNet(nn.Module):
     def __init__(
@@ -37,11 +32,11 @@ class StageNet(nn.Module):
         self.levels = levels
         self.chunk_size = hidden_dim // levels
 
-        self.kernel = nn.Linear(int(input_dim + 1), int(hidden_dim * 4 + levels * 2))
+        self.kernel = nn.Linear(int(input_dim + 17), int(hidden_dim * 4 + levels * 2))
         nn.init.xavier_uniform_(self.kernel.weight)
         nn.init.zeros_(self.kernel.bias)
         self.recurrent_kernel = nn.Linear(
-            int(hidden_dim + 1), int(hidden_dim * 4 + levels * 2)
+            int(hidden_dim + 17), int(hidden_dim * 4 + levels * 2)
         )
         nn.init.orthogonal_(self.recurrent_kernel.weight)
         nn.init.zeros_(self.recurrent_kernel.bias)
@@ -75,7 +70,7 @@ class StageNet(nn.Module):
         x_in = inputs
 
         # Integrate inter-visit time intervals?
-        interval = interval.unsqueeze(-1)
+        # interval = interval.unsqueeze(-1)
         x_out1 = self.kernel(torch.cat((x_in, interval), dim=-1))
         x_out2 = self.recurrent_kernel(torch.cat((h_last, interval), dim=-1))
 
@@ -107,7 +102,7 @@ class StageNet(nn.Module):
         return out, c_out, h_out
 
     def forward(self, input, time, device):
-        batch_size, time_step, feature_dim = input.size()
+        batch_size, time_step, _ = input.size()
         c_out = torch.zeros(batch_size, self.hidden_dim).to(device)
         h_out = torch.zeros(batch_size, self.hidden_dim).to(device)
 
@@ -123,7 +118,7 @@ class StageNet(nn.Module):
         origin_h = []
         distance = []
         for t in range(time_step):
-            out, c_out, h_out = self.step(input[:, t, :], c_out, h_out, time[:, t])
+            out, c_out, h_out = self.step(input[:, t, :], c_out, h_out, time[:, t, :])
             cur_distance = 1 - torch.mean(
                 out[..., self.hidden_dim : self.hidden_dim + self.levels], -1
             )
