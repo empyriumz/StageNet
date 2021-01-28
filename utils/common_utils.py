@@ -214,11 +214,11 @@ class DataLoader:
         
         mas = {"X": [], "ts": [], "ys": [], "name": []}
         mas['name'] = list(group.index)
-        mas["ys"] = group['y_true']
-        mas["ts"] = group['period_length']
+        mas["ys"] = group['y_true'].values
+        mas["ts"] = group['period_length'].values
         for file_name in mas['name']:
             tmp_df = pd.read_csv(self._dataset_dir+"/"+file_name)
-            current_X = tmp_df.to_numpy()
+            current_X = tmp_df[['Hours','Diastolic blood pressure']].dropna().to_numpy()
             mas["X"].append(current_X)
         self._data = mas
             

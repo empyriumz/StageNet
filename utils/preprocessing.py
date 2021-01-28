@@ -14,9 +14,9 @@ class Discretizer:
         timestep=0.8,
         store_masks=True,
         impute_strategy="zero",
-        start_time="zero",
+        start_time="relative",
         config_path=os.path.join(
-            os.path.dirname(__file__), "resources/discretizer_config.json"
+            os.path.dirname(__file__), "resources/custom_discretizer.json"
         ),
     ):
 

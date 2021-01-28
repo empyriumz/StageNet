@@ -40,7 +40,7 @@ def parse_arguments(parser):
     parser.add_argument("--lr", type=float, default=0.001, help="Learing rate")
 
     parser.add_argument(
-        "--input_dim", type=int, default=59, help="Dimension of visit record data"
+        "--input_dim", type=int, default=1, help="Dimension of visit record data"
     )
     parser.add_argument(
         "--hidden_dim", type=int, default=384, help="Dimension of hidden units in RNN"
@@ -73,21 +73,19 @@ if __name__ == "__main__":
 
     """ Prepare training data"""
     print("Preparing training data ... ")
-    train_data_loader = common_utils.DeepSupervisionDataLoader(
+    train_data_loader = common_utils.DataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-list.csv"),
-        small_part=args.small_part,
+        listfile=os.path.join(args.data_path, "demo-list.csv")
     )
-    val_data_loader = common_utils.DeepSupervisionDataLoader(
+    val_data_loader = common_utils.DataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-val-list.csv"),
-        small_part=args.small_part,
+        listfile=os.path.join(args.data_path, "demo-val-list.csv")
     )
     discretizer = Discretizer(
         timestep=1.0,
         store_masks=True,
         impute_strategy="previous",
-        start_time="zero",
+        start_time="relative",
     )
 
     discretizer_header = discretizer.create_header().split(",")
@@ -124,7 +122,7 @@ if __name__ == "__main__":
     print("available device: {}".format(device))
     
     if discretizer._store_masks:
-        input_dim = args.input_dim + 17
+        input_dim = args.input_dim + 1
     else:
         input_dim = args.input_dim
         
@@ -164,15 +162,15 @@ if __name__ == "__main__":
                 .to(device)
             )
             batch_y = torch.tensor(batch_data[1], dtype=torch.float32).to(device)
-            tmp = torch.zeros(batch_x.size(0), 17, dtype=torch.float32).to(device)
+            tmp = torch.zeros(batch_x.size(0), 1, dtype=torch.float32).to(device)
             batch_interval = torch.zeros(
-                (batch_x.size(0), batch_x.size(1), 17), dtype=torch.float32
+                (batch_x.size(0), batch_x.size(1), 1), dtype=torch.float32
             ).to(device)
 
             for i in range(batch_x.size(1)):
                 # go over time direction
                 # cur_ind represents the mask part in the data
-                cur_ind = batch_x[:, i, -17:]
+                cur_ind = batch_x[:, i, -1:]
                 # identify the empty data spot and accumulate
                 tmp += (cur_ind == 0).float()
                 # keeps track of the the interval from last non-zero data
@@ -227,13 +225,13 @@ if __name__ == "__main__":
                     .to(device)
                 )
                 valid_y = torch.tensor(valid_data[1], dtype=torch.float32).to(device)
-                tmp = torch.zeros(valid_x.size(0), 17, dtype=torch.float32).to(device)
+                tmp = torch.zeros(valid_x.size(0), 1, dtype=torch.float32).to(device)
                 valid_interval = torch.zeros(
-                    (valid_x.size(0), valid_x.size(1), 17), dtype=torch.float32
+                    (valid_x.size(0), valid_x.size(1), 1), dtype=torch.float32
                 ).to(device)
 
                 for i in range(valid_x.size(1)):
-                    cur_ind = valid_x[:, i, -17:]
+                    cur_ind = valid_x[:, i, -1:]
                     tmp += (cur_ind == 0).float()
                     valid_interval[:, i, :] = cur_ind * tmp
                     tmp[cur_ind == 1] = 0
