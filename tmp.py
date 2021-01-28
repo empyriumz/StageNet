@@ -85,7 +85,7 @@ if __name__ == "__main__":
     )
     discretizer = Discretizer(
         timestep=1.0,
-        store_masks=False,
+        store_masks=True,
         impute_strategy="previous",
         start_time="zero",
     )
@@ -122,9 +122,14 @@ if __name__ == "__main__":
     print("Constructing model ... ")
     device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
     print("available device: {}".format(device))
-
+    
+    if discretizer._store_masks:
+        input_dim = args.input_dim + 17
+    else:
+        input_dim = args.input_dim
+        
     model = StageNet(
-        args.input_dim,
+        input_dim,
         args.hidden_dim,
         args.K,
         args.output_dim,
