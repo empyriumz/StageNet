@@ -14,67 +14,68 @@ def preprocess_chunk(data, ts, discretizer, normalizer=None):
         data = [normalizer.transform(X) for X in data]
     return data
 
-
-class BatchGen(object):
+class BatchGenerator(object):
     def __init__(
         self,
-        reader,
-        discretizer,
-        normalizer,
+        dataloader,
         batch_size,
-        steps,
-        shuffle,
-        return_names=False,
+        shuffle = False
     ):
-        self.reader = reader
-        self.discretizer = discretizer
-        self.normalizer = normalizer
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.return_names = return_names
+        self.load_per_patient_data(dataloader)
 
-        if steps is None:
-            self.n_examples = reader.get_number_of_examples()
-            self.steps = (self.n_examples + batch_size - 1) // batch_size
-        else:
-            self.n_examples = steps * batch_size
-            self.steps = steps
-
-        self.chunk_size = min(1024, self.steps) * batch_size
+        self.steps = (len(self.data[1]) + batch_size - 1) // batch_size
         self.lock = threading.Lock()
         self.generator = self._generator()
 
+    def load_patient_data(self, dataloader):
+        Xs, ys = dataloader._data["X"], dataloader._data["ys"]
+        time_interval, names = dataloader._data['interval'], dataloader._data['name']
+        self.data = [Xs, ys]
+        self.names = names
+        self.interval = time_interval
+    
     def _generator(self):
         B = self.batch_size
         while True:
             if self.shuffle:
-                self.reader.random_shuffle()
-            remaining = self.n_examples
-            while remaining > 0:
-                current_size = min(self.chunk_size, remaining)
-                remaining -= current_size
-
-                ret = common_utils.read_chunk(self.reader, current_size)
-                Xs = ret["X"]
-                ts = ret["t"]
-                ys = ret["y"]
-                names = ret["name"]
-
-                Xs = preprocess_chunk(Xs, ts, self.discretizer, self.normalizer)
-                (Xs, ys, ts, names) = common_utils.sort_and_shuffle(
-                    [Xs, ys, ts, names], B
+                # stupid shuffle
+                N = len(self.data[1])
+                order = list(range(N))
+                random.shuffle(order)
+                tmp_data = [[None] * N, [None] * N]
+                tmp_names = [None] * N
+                tmp_ts = [None] * N
+                for i in range(N):
+                    tmp_data[0][i] = self.data[0][order[i]]
+                    tmp_data[0][i] = self.data[0][order[i]]
+                    tmp_data[1][i] = self.data[1][order[i]]
+                    tmp_names[i] = self.names[order[i]]
+                    tmp_ts[i] = self.interval[order[i]]
+                self.data = tmp_data
+                self.names = tmp_names
+                self.interval = tmp_ts
+            else:
+                # sort entirely
+                Xs = self.data[0]
+                ys = self.data[1]
+                (Xs, ys, self.names, self.interval) = common_utils.sort_and_shuffle(
+                    [Xs, ys, self.names, self.interval], B
                 )
+                self.data = [Xs, ys]
 
-                for i in range(0, current_size, B):
-                    X = common_utils.pad_zeros(Xs[i : i + B])
-                    y = np.array(ys[i : i + B])
-                    batch_names = names[i : i + B]
-                    batch_ts = ts[i : i + B]
-                    batch_data = (X, y)
-                    if not self.return_names:
-                        yield batch_data
-                    else:
-                        yield {"data": batch_data, "names": batch_names, "ts": batch_ts}
+            for i in range(0, len(self.data[1]), B):
+                X = self.data[0][i : i + B]
+                y = self.data[1][i : i + B]
+                names = self.names[i : i + B]
+                interval = self.interval[i : i + B]
+
+                X = common_utils.pad_zeros(X)  # (B, T, D)
+                y = common_utils.pad_zeros(y)
+                y = np.expand_dims(y, axis=-1)  # (B, T, 1)
+                batch_data = (X, y)
+                yield {"data": batch_data, "names": names, "interval": interval}
 
     def __iter__(self):
         return self.generator
@@ -85,8 +86,6 @@ class BatchGen(object):
 
     def __next__(self):
         return self.next()
-
-
 class BatchGenDeepSupervision(object):
     def __init__(
         self,
@@ -123,11 +122,11 @@ class BatchGenDeepSupervision(object):
 
         for i in range(N):
             X = dataloader._data["X"][i]
-            current_t = dataloader._data["ts"][i]
+            current_t = dataloader._data["time"][i]
             current_y = dataloader._data["ys"][i]
             name = dataloader._data["name"][i]
 
-            current_y = [int(x) for x in current_y]
+            current_y = [int(y) for y in current_y]
 
             T = max(current_t)
             nsteps = get_bin(T) + 1

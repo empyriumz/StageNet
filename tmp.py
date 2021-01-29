@@ -83,7 +83,7 @@ if __name__ == "__main__":
     )
     discretizer = Discretizer(
         timestep=1.0,
-        store_masks=True,
+        store_masks=False,
         impute_strategy="previous",
         start_time="relative",
     )
@@ -99,21 +99,15 @@ if __name__ == "__main__":
     normalizer_state = os.path.join(args.data_path, normalizer_state)
     normalizer.load_params(normalizer_state)
 
-    train_data_gen = utils.BatchGenDeepSupervision(
+    train_data_gen = utils.BatchGenerator(
         train_data_loader,
-        discretizer,
-        normalizer,
         args.batch_size,
-        shuffle=True,
-        return_names=True,
+        shuffle=True
     )
-    val_data_gen = utils.BatchGenDeepSupervision(
+    val_data_gen = utils.BatchGenerator(
         val_data_loader,
-        discretizer,
-        normalizer,
         args.batch_size,
-        shuffle=False,
-        return_names=True,
+        shuffle=False
     )
 
     """Model structure"""
@@ -154,29 +148,25 @@ if __name__ == "__main__":
             batch_data = next(train_data_gen)
             batch_name = batch_data["names"]
             batch_data = batch_data["data"]
-
-            batch_x = torch.tensor(batch_data[0][0], dtype=torch.float32).to(device)
-            batch_mask = (
-                torch.tensor(batch_data[0][1], dtype=torch.float32)
+            #batch_interval = batch_data["interval"]
+            batch_x = torch.tensor(batch_data[0], dtype=torch.float32).to(device)
+            batch_interval = (
+                torch.tensor(batch_data["interval"], dtype=torch.float32)
                 .unsqueeze(-1)
                 .to(device)
             )
             batch_y = torch.tensor(batch_data[1], dtype=torch.float32).to(device)
-            tmp = torch.zeros(batch_x.size(0), 1, dtype=torch.float32).to(device)
-            batch_interval = torch.zeros(
-                (batch_x.size(0), batch_x.size(1), 1), dtype=torch.float32
-            ).to(device)
-
-            for i in range(batch_x.size(1)):
-                # go over time direction
-                # cur_ind represents the mask part in the data
-                cur_ind = batch_x[:, i, -1:]
-                # identify the empty data spot and accumulate
-                tmp += (cur_ind == 0).float()
-                # keeps track of the the interval from last non-zero data
-                batch_interval[:, i, :] = cur_ind * tmp
-                # so those with non-zero data at the moment, set the timer to zero
-                tmp[cur_ind == 1] = 0
+            #tmp = torch.zeros(batch_x.size(0), 1, dtype=torch.float32).to(device)
+            # for i in range(batch_x.size(1)):
+            #     # go over time direction
+            #     # cur_ind represents the mask part in the data
+            #     cur_ind = batch_x[:, i, -1:]
+            #     # identify the empty data spot and accumulate
+            #     tmp += (cur_ind == 0).float()
+            #     # keeps track of the the interval from last non-zero data
+            #     batch_interval[:, i, :] = cur_ind * tmp
+            #     # so those with non-zero data at the moment, set the timer to zero
+            #     tmp[cur_ind == 1] = 0
             
             # cut long sequence
             if batch_mask.size()[1] > 400:
@@ -186,11 +176,11 @@ if __name__ == "__main__":
                 batch_interval = batch_interval[:, :400, :]
 
             optimizer.zero_grad()
-            cur_output, _ = model(batch_x, batch_interval, device)
-            masked_output = cur_output * batch_mask
-            loss = batch_y * torch.log(masked_output + 1e-7) + (
+            output, _ = model(batch_x, batch_interval, device)
+            #masked_output = cur_output * batch_mask
+            loss = batch_y * torch.log(output + 1e-7) + (
                 1 - batch_y
-            ) * torch.log(1 - masked_output + 1e-7)
+            ) * torch.log(1 - output + 1e-7)
             loss = torch.sum(loss, dim=1) / torch.sum(batch_mask, dim=1)
             loss = torch.neg(torch.sum(loss))
             cur_batch_loss.append(loss.cpu().detach().numpy())
