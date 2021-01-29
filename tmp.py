@@ -211,7 +211,7 @@ if __name__ == "__main__":
                     valid_interval = valid_interval[:, :400, :]
                     valid_y = valid_y[:, :400, :]
 
-                valid_output, valid_dis = model(valid_x, valid_interval, device)
+                valid_output, _ = model(valid_x, valid_interval, device)
   
                 valid_loss = valid_y * torch.log(valid_output + 1e-7) + (
                     1 - valid_y
@@ -220,14 +220,20 @@ if __name__ == "__main__":
                 valid_loss = torch.neg(torch.sum(valid_loss)) / valid_interval.size()[0]
                 cur_val_loss.append(valid_loss.cpu().detach().numpy())
 
-                for m, t, p in zip(
-                    valid_mask.cpu().numpy().flatten(),
+                # for m, t, p in zip(
+                #     valid_mask.cpu().numpy().flatten(),
+                #     valid_y.cpu().numpy().flatten(),
+                #     valid_output.cpu().detach().numpy().flatten(),
+                # ):
+                #     if np.equal(m, 1):
+                #         valid_true.append(t)
+                #         valid_pred.append(p)
+                for t, p in zip(
                     valid_y.cpu().numpy().flatten(),
                     valid_output.cpu().detach().numpy().flatten(),
                 ):
-                    if np.equal(m, 1):
-                        valid_true.append(t)
-                        valid_pred.append(p)
+                    valid_true.append(t)
+                    valid_pred.append(p)
 
             val_loss.append(np.mean(np.array(cur_val_loss)))
             print("Valid loss = %.4f" % (val_loss[-1]))

@@ -46,24 +46,24 @@ class BatchGenerator(object):
                 random.shuffle(order)
                 tmp_data = [[None] * N, [None] * N]
                 tmp_names = [None] * N
-                tmp_ts = [None] * N
+                tmp_interval = [None] * N
                 for i in range(N):
                     tmp_data[0][i] = self.data[0][order[i]]
                     tmp_data[0][i] = self.data[0][order[i]]
                     tmp_data[1][i] = self.data[1][order[i]]
                     tmp_names[i] = self.names[order[i]]
-                    tmp_ts[i] = self.interval[order[i]]
+                    tmp_interval[i] = self.interval[order[i]]
                 self.data = tmp_data
                 self.names = tmp_names
-                self.interval = tmp_ts
-            else:
-                # sort entirely
-                X = self.data[0]
-                y = self.data[1]
-                (X, y, self.names, self.interval) = common_utils.sort_and_shuffle(
-                    [X, y, self.names, self.interval], B
-                )
-                self.data = [X, y]
+                self.interval = tmp_interval
+            # else:
+            #     # sort entirely
+            #     X = self.data[0]
+            #     y = self.data[1]
+            #     (X, y, self.names, self.interval) = common_utils.sort_and_shuffle(
+            #         [X, y, self.names, self.interval], B
+            #     )
+            #     self.data = [X, y]
 
             for i in range(0, len(self.data[1]), B):
                 X = self.data[0][i : i + B]
@@ -169,16 +169,16 @@ class BatchGenDeepSupervision(object):
                 random.shuffle(order)
                 tmp_data = [[[None] * N, [None] * N], [None] * N]
                 tmp_names = [None] * N
-                tmp_ts = [None] * N
+                tmp_interval = [None] * N
                 for i in range(N):
                     tmp_data[0][0][i] = self.data[0][0][order[i]]
                     tmp_data[0][1][i] = self.data[0][1][order[i]]
                     tmp_data[1][i] = self.data[1][order[i]]
                     tmp_names[i] = self.names[order[i]]
-                    tmp_ts[i] = self.ts[order[i]]
+                    tmp_interval[i] = self.ts[order[i]]
                 self.data = tmp_data
                 self.names = tmp_names
-                self.ts = tmp_ts
+                self.ts = tmp_interval
             else:
                 # sort entirely
                 Xs = self.data[0][0]
