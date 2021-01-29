@@ -212,19 +212,19 @@ class DataLoader:
         df = df.sort_values(by=['stay', 'period_length'])
         group = df.groupby('stay').agg(list)
         
-        mas = {"X": [],  "time": [], "interval": [], "ys": [], "name": []}
-        mas['name'] = list(group.index)
-        mas["ys"] = group['y_true'].values
-        for file_name in mas['name']:
+        data = {"X": [],  "time": [], "interval": [], "y": [], "name": []}
+        data['name'] = list(group.index)
+        data["y"] = group['y_true'].apply(lambda x: np.asarray(x)).values
+        for file_name in data['name']:
             tmp_df = pd.read_csv(self._dataset_dir+"/"+file_name)
             current_data = tmp_df[['Hours','Diastolic blood pressure']].dropna()
             current_data = current_data.sort_values(by=['Hours'])
             current_data['interval'] = current_data['Hours'].diff().fillna(0)
-            mas["time"].append(current_data['Hours'].values)
-            mas["X"].append(current_data['Diastolic blood pressure'].values)
-            mas["interval"].append(current_data['interval'])
+            data["time"].append(current_data['Hours'].values)
+            data["X"].append(current_data['Diastolic blood pressure'].values)
+            data["interval"].append(current_data['interval'].values)
             
-        self._data = mas
+        self._data = data
             
 def create_directory(directory):
     if not os.path.exists(directory):

@@ -23,16 +23,16 @@ class BatchGenerator(object):
     ):
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.load_per_patient_data(dataloader)
+        self.load_patient_data(dataloader)
 
         self.steps = (len(self.data[1]) + batch_size - 1) // batch_size
         self.lock = threading.Lock()
         self.generator = self._generator()
 
     def load_patient_data(self, dataloader):
-        Xs, ys = dataloader._data["X"], dataloader._data["ys"]
+        X, y = dataloader._data["X"], dataloader._data["y"]
         time_interval, names = dataloader._data['interval'], dataloader._data['name']
-        self.data = [Xs, ys]
+        self.data = [X, y]
         self.names = names
         self.interval = time_interval
     
@@ -58,12 +58,12 @@ class BatchGenerator(object):
                 self.interval = tmp_ts
             else:
                 # sort entirely
-                Xs = self.data[0]
-                ys = self.data[1]
-                (Xs, ys, self.names, self.interval) = common_utils.sort_and_shuffle(
-                    [Xs, ys, self.names, self.interval], B
+                X = self.data[0]
+                y = self.data[1]
+                (X, y, self.names, self.interval) = common_utils.sort_and_shuffle(
+                    [X, y, self.names, self.interval], B
                 )
-                self.data = [Xs, ys]
+                self.data = [X, y]
 
             for i in range(0, len(self.data[1]), B):
                 X = self.data[0][i : i + B]
@@ -73,7 +73,10 @@ class BatchGenerator(object):
 
                 X = common_utils.pad_zeros(X)  # (B, T, D)
                 y = common_utils.pad_zeros(y)
-                y = np.expand_dims(y, axis=-1)  # (B, T, 1)
+                interval = common_utils.pad_zeros(interval)
+                X = np.expand_dims(X, axis=-1)  # (B, T, 1)
+                y = np.expand_dims(y, axis=-1)  # (B, T, 1)         
+                interval = np.expand_dims(interval, axis=-1)  # (B, T, 1)
                 batch_data = (X, y)
                 yield {"data": batch_data, "names": names, "interval": interval}
 
@@ -117,13 +120,13 @@ class BatchGenDeepSupervision(object):
         Xs = []
         ts = []
         masks = []
-        ys = []
+        y = []
         names = []
 
         for i in range(N):
             X = dataloader._data["X"][i]
             current_t = dataloader._data["time"][i]
-            current_y = dataloader._data["ys"][i]
+            current_y = dataloader._data["y"][i]
             name = dataloader._data["name"][i]
 
             current_y = [int(y) for y in current_y]
@@ -145,14 +148,14 @@ class BatchGenDeepSupervision(object):
 
             Xs.append(X)
             masks.append(np.array(mask))
-            ys.append(np.array(y))
+            y.append(np.array(y))
             names.append(name)
             ts.append(current_t)
 
             assert np.sum(mask) > 0
             assert len(X) == len(mask) and len(X) == len(y)
 
-        self.data = [[Xs, masks], ys]
+        self.data = [[Xs, masks], y]
         self.names = names
         self.ts = ts
 
@@ -180,11 +183,11 @@ class BatchGenDeepSupervision(object):
                 # sort entirely
                 Xs = self.data[0][0]
                 masks = self.data[0][1]
-                ys = self.data[1]
-                (Xs, masks, ys, self.names, self.ts) = common_utils.sort_and_shuffle(
-                    [Xs, masks, ys, self.names, self.ts], B
+                y = self.data[1]
+                (Xs, masks, y, self.names, self.ts) = common_utils.sort_and_shuffle(
+                    [Xs, masks, y, self.names, self.ts], B
                 )
-                self.data = [[Xs, masks], ys]
+                self.data = [[Xs, masks], y]
 
             for i in range(0, len(self.data[1]), B):
                 X = self.data[0][0][i : i + B]
