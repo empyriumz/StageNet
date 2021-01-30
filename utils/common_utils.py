@@ -212,9 +212,14 @@ class DataLoader:
         df = df.sort_values(by=['stay', 'period_length'])
         group = df.groupby('stay').agg(list)
         
-        data = {"X": [],  "time": [], "interval": [], "y": [], "name": []}
-        data['name'] = list(group.index)
-        data["y"] = group['y_true'].apply(lambda x: np.asarray(x)).values
+        data = {"X": [],  "time": [], "mask": [], "interval": [], "y": [], "name": []}
+        name = list(group.index)
+        data['name'] = name
+        #TODO: X and y dimension don't match due to the special data structure
+        # we need to manually adjust the data to make the two match
+        # make the assumption that y doesn't change
+        y = group['y_true'].apply(lambda x: x[-1]).to_list()
+        y_true = dict(zip(name, y))
         for file_name in data['name']:
             tmp_df = pd.read_csv(self._dataset_dir+"/"+file_name)
             current_data = tmp_df[['Hours','Diastolic blood pressure']].dropna()
@@ -222,8 +227,11 @@ class DataLoader:
             current_data['interval'] = current_data['Hours'].diff().fillna(0)
             data["time"].append(current_data['Hours'].values)
             data["X"].append(current_data['Diastolic blood pressure'].values)
-            data["interval"].append(current_data['interval'].values)
-            
+            tmp = current_data['interval'].values
+            data["interval"].append(tmp)
+            data["mask"].append(np.ones_like(tmp))
+            data["y"].append(y_true[file_name] * np.ones_like(tmp))
+           
         self._data = data
             
 def create_directory(directory):

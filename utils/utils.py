@@ -32,9 +32,11 @@ class BatchGenerator(object):
     def load_patient_data(self, dataloader):
         X, y = dataloader._data["X"], dataloader._data["y"]
         time_interval, names = dataloader._data['interval'], dataloader._data['name']
+        mask = dataloader._data['mask']
         self.data = [X, y]
         self.names = names
         self.interval = time_interval
+        self.mask = mask
     
     def _generator(self):
         B = self.batch_size
@@ -47,38 +49,35 @@ class BatchGenerator(object):
                 tmp_data = [[None] * N, [None] * N]
                 tmp_names = [None] * N
                 tmp_interval = [None] * N
+                tmp_mask = [None] * N
                 for i in range(N):
                     tmp_data[0][i] = self.data[0][order[i]]
                     tmp_data[0][i] = self.data[0][order[i]]
                     tmp_data[1][i] = self.data[1][order[i]]
                     tmp_names[i] = self.names[order[i]]
                     tmp_interval[i] = self.interval[order[i]]
+                    tmp_mask[i] = self.mask[order[i]]
                 self.data = tmp_data
                 self.names = tmp_names
                 self.interval = tmp_interval
-            # else:
-            #     # sort entirely
-            #     X = self.data[0]
-            #     y = self.data[1]
-            #     (X, y, self.names, self.interval) = common_utils.sort_and_shuffle(
-            #         [X, y, self.names, self.interval], B
-            #     )
-            #     self.data = [X, y]
+                self.mask = tmp_mask
 
             for i in range(0, len(self.data[1]), B):
                 X = self.data[0][i : i + B]
                 y = self.data[1][i : i + B]
                 names = self.names[i : i + B]
                 interval = self.interval[i : i + B]
-
+                mask = self.mask[i : i + B]
                 X = common_utils.pad_zeros(X)  # (B, T, D)
                 y = common_utils.pad_zeros(y)
+                mask = common_utils.pad_zeros(mask)
                 interval = common_utils.pad_zeros(interval)
                 X = np.expand_dims(X, axis=-1)  # (B, T, 1)
                 y = np.expand_dims(y, axis=-1)  # (B, T, 1)         
                 interval = np.expand_dims(interval, axis=-1)  # (B, T, 1)
+                mask = np.expand_dims(mask, axis=-1)  # (B, T, 1)
                 batch_data = (X, y)
-                yield {"data": batch_data, "names": names, "interval": interval}
+                yield {"data": batch_data, "mask": mask, "names": names, "interval": interval}
 
     def __iter__(self):
         return self.generator
