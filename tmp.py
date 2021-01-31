@@ -150,25 +150,12 @@ if __name__ == "__main__":
                 device
             )
             batch_mask = torch.tensor(batch_mask, dtype=torch.float32).to(device)
-
-            # tmp = torch.zeros(batch_x.size(0), 1, dtype=torch.float32).to(device)
-            # for i in range(batch_x.size(1)):
-            #     # go over time direction
-            #     # cur_ind represents the mask part in the data
-            #     cur_ind = batch_x[:, i, -1:]
-            #     # identify the empty data spot and accumulate
-            #     tmp += (cur_ind == 0).float()
-            #     # keeps track of the the interval from last non-zero data
-            #     batch_interval[:, i, :] = cur_ind * tmp
-            #     # so those with non-zero data at the moment, set the timer to zero
-            #     tmp[cur_ind == 1] = 0
-
             # cut long sequence
             if batch_interval.size()[1] > 400:
                 batch_x = batch_x[:, :400, :]
                 batch_y = batch_y[:, :400, :]
                 batch_interval = batch_interval[:, :400, :]
-                batch_mask = batch_mask[:, :400, :]
+                batch_mask = batch_mask[:, :400]
 
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, device)
@@ -177,8 +164,6 @@ if __name__ == "__main__":
                 1 - output + 1e-7
             )
             loss = torch.sum(loss, dim=1) / torch.sum(batch_mask, dim=1)
-            #loss = torch.sum(loss, dim=1)
-            #loss = torch.neg(torch.sum(loss)) / batch_interval.size()[0]
             loss = torch.neg(torch.sum(loss))
             cur_batch_loss.append(loss.cpu().detach().numpy())
 
@@ -216,15 +201,15 @@ if __name__ == "__main__":
                     valid_x = valid_x[:, :400, :]
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
-                    valid_mask = valid_mask[:, :400, :]
+                    valid_mask = valid_mask[:, :400]
 
                 valid_output, _ = model(valid_x, valid_interval, device)
                 valid_output = valid_mask * valid_output
                 valid_loss = valid_y * torch.log(valid_output + 1e-7) + (
                     1 - valid_y
                 ) * torch.log(1 - valid_output + 1e-7)
-                valid_loss = torch.sum(valid_loss, dim=1)
-                valid_loss = torch.neg(torch.sum(valid_loss)) / valid_interval.size()[0]
+                valid_loss = torch.sum(valid_loss, dim=1) / torch.sum(valid_mask, dim=1)
+                valid_loss = torch.neg(torch.sum(valid_loss))
                 cur_val_loss.append(valid_loss.cpu().detach().numpy())
 
                 for m, t, p in zip(
