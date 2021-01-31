@@ -3,47 +3,8 @@ from __future__ import print_function
 
 import numpy as np
 import os
-import json
 import random
 import pandas as pd
-
-from .feature_extractor import extract_features
-
-
-def convert_to_dict(data, header, channel_info):
-    """ convert data from readers output in to array of arrays format """
-    ret = [[] for _ in range(data.shape[1] - 1)]
-    for i in range(1, data.shape[1]):
-        ret[i - 1] = [(t, x) for (t, x) in zip(data[:, 0], data[:, i]) if x != ""]
-        channel = header[i]
-        if len(channel_info[channel]["possible_values"]) != 0:
-            ret[i - 1] = list(
-                map(lambda x: (x[0], channel_info[channel]["values"][x[1]]), ret[i - 1])
-            )
-        ret[i - 1] = list(map(lambda x: (float(x[0]), float(x[1])), ret[i - 1]))
-    return ret
-
-
-def extract_features_from_rawdata(chunk, header, period, features):
-    with open(
-        os.path.join(os.path.dirname(__file__), "resources/channel_info.json")
-    ) as channel_info_file:
-        channel_info = json.loads(channel_info_file.read())
-    data = [convert_to_dict(X, header, channel_info) for X in chunk]
-    return extract_features(data, period, features)
-
-
-def read_chunk(reader, chunk_size):
-    data = {}
-    for i in range(chunk_size):
-        ret = reader.read_next()
-        for k, v in ret.items():
-            if k not in data:
-                data[k] = []
-            data[k].append(v)
-    data["header"] = data["header"][0]
-    return data
-
 
 def sort_and_shuffle(data, batch_size):
     """Sort data by the length and then make batches and shuffle them.
@@ -152,7 +113,7 @@ class DataLoader:
     def __init__(self, dataset_dir, listfile=None):
         self._dataset_dir = dataset_dir
         if listfile is None:
-            listfile_path = os.path.join(dataset_dir, "listfile.csv")
+            listfile_path = os.path.join(self._dataset_dir, "listfile.csv")
         else:
             listfile_path = listfile
         df = pd.read_csv(listfile_path)
@@ -162,7 +123,7 @@ class DataLoader:
         data = {"X": [],  "time": [], "mask": [], "interval": [], "y": [], "name": []}
         name = list(group.index)
         data['name'] = name
-        #TODO: X and y dimension don't match due to the special data structure
+        # X and y dimension don't match due to the special data structure
         # we need to manually adjust the data to make the two match
         # make the assumption that y doesn't change
         y = group['y_true'].apply(lambda x: x[-1]).to_list()

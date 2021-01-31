@@ -109,13 +109,8 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
     print("available device: {}".format(device))
 
-    if discretizer._store_masks:
-        input_dim = args.input_dim + 1
-    else:
-        input_dim = args.input_dim
-
     model = StageNet(
-        input_dim,
+        args.input_dim,
         args.hidden_dim,
         args.K,
         args.output_dim,
@@ -155,7 +150,7 @@ if __name__ == "__main__":
                 batch_x = batch_x[:, :400, :]
                 batch_y = batch_y[:, :400, :]
                 batch_interval = batch_interval[:, :400, :]
-                batch_mask = batch_mask[:, :400]
+                batch_mask = batch_mask[:, :400, :]
 
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, device)
@@ -201,7 +196,7 @@ if __name__ == "__main__":
                     valid_x = valid_x[:, :400, :]
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
-                    valid_mask = valid_mask[:, :400]
+                    valid_mask = valid_mask[:, :400, :]
 
                 valid_output, _ = model(valid_x, valid_interval, device)
                 valid_output = valid_mask * valid_output

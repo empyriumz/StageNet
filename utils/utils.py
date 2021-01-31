@@ -31,13 +31,10 @@ class BatchGenerator(object):
 
     def load_patient_data(self, dataloader):
         X, y = dataloader._data["X"], dataloader._data["y"]
-        time_interval, names = dataloader._data['interval'], dataloader._data['name']
-        mask = dataloader._data['mask']
+        self.interval, self.names = dataloader._data['interval'], dataloader._data['name']
+        self.mask = dataloader._data['mask']
         self.data = [X, y]
-        self.names = names
-        self.interval = time_interval
-        self.mask = mask
-    
+
     def _generator(self):
         B = self.batch_size
         while True:
@@ -51,7 +48,6 @@ class BatchGenerator(object):
                 tmp_interval = [None] * N
                 tmp_mask = [None] * N
                 for i in range(N):
-                    tmp_data[0][i] = self.data[0][order[i]]
                     tmp_data[0][i] = self.data[0][order[i]]
                     tmp_data[1][i] = self.data[1][order[i]]
                     tmp_names[i] = self.names[order[i]]
