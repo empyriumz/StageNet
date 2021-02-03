@@ -146,6 +146,8 @@ class StageNet(nn.Module):
         rnn_outputs = torch.stack(h).permute(1, 0, 2)
         if self.dropres > 0.0:
             origin_h = self.nn_dropres(origin_h)
+        #TODO: try using the last time step info only?
+        # and then append the static data to feed into the last layer
         rnn_outputs = rnn_outputs + origin_h
         rnn_outputs = rnn_outputs.contiguous().view(-1, rnn_outputs.size(-1))
         if self.dropout > 0.0:
