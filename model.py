@@ -67,11 +67,8 @@ class StageNet(nn.Module):
             return x
 
     def step(self, inputs, c_last, h_last, interval):
-        x_in = inputs
-
         # Integrate inter-visit time intervals?
-        # interval = interval.unsqueeze(-1)
-        x_out1 = self.kernel(torch.cat((x_in, interval), dim=-1))
+        x_out1 = self.kernel(torch.cat((inputs, interval), dim=-1))
         x_out2 = self.recurrent_kernel(torch.cat((h_last, interval), dim=-1))
 
         if self.dropconnect:
