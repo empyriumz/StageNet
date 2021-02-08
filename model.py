@@ -14,7 +14,7 @@ class StageNet(nn.Module):
         conv_size,
         output_dim,
         levels,
-        dropconnect=0.0,
+        dropconnect_rate=0.0,
         dropout=0.0,
         dropres=0.3,
     ):
@@ -22,7 +22,7 @@ class StageNet(nn.Module):
 
         assert hidden_dim % levels == 0
         self.dropout = dropout
-        self.dropconnect = dropconnect
+        self.dropconnect_rate = dropconnect_rate
         self.dropres = dropres
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -46,9 +46,9 @@ class StageNet(nn.Module):
         self.nn_conv = nn.Conv1d(int(hidden_dim), int(self.conv_dim), int(conv_size), 1)
         self.nn_output = nn.Linear(int(self.conv_dim), int(output_dim))
 
-        if self.dropconnect:
-            self.nn_dropconnect = nn.Dropout(p=dropconnect)
-            self.nn_dropconnect_r = nn.Dropout(p=dropconnect)
+        if self.dropconnect_rate:
+            self.nn_dropconnect = nn.Dropout(p=dropconnect_rate)
+            self.nn_dropconnect_r = nn.Dropout(p=dropconnect_rate)
         if self.dropout:
             self.nn_dropout = nn.Dropout(p=dropout)
             self.nn_dropres = nn.Dropout(p=dropres)

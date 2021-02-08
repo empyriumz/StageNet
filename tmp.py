@@ -14,7 +14,6 @@ torch.cuda.manual_seed(RANDOM_SEED)
 torch.backends.cudnn.deterministic = True
 
 from utils import utils
-from utils.preprocessing import Discretizer, Normalizer
 from utils import metrics
 from utils import common_utils
 from model import StageNet
@@ -29,9 +28,6 @@ def parse_arguments(parser):
     )
     parser.add_argument(
         "--file_name", type=str, metavar="<data_path>", help="File name to save model"
-    )
-    parser.add_argument(
-        "--small_part", type=int, default=0, help="Use part of training data"
     )
     parser.add_argument(
         "--batch_size", type=int, default=256, help="Training batch size"
@@ -58,9 +54,9 @@ def parse_arguments(parser):
         default=0.3,
         help="Dropout rate in residue connection",
     )
-    parser.add_argument("--K", type=int, default=10, help="Value of hyper-parameter K")
+    parser.add_argument("--conv_size", type=int, default=10, help="Convolutional filter width")
     parser.add_argument(
-        "--chunk_level", type=int, default=3, help="Value of hyper-parameter K"
+        "--chunk_level", type=int, default=3, help="Value of parameter controlling the degree of coarse grain"
     )
 
     args = parser.parse_args()
@@ -81,23 +77,6 @@ if __name__ == "__main__":
         dataset_dir=os.path.join(args.data_path, "train"),
         listfile=os.path.join(args.data_path, "demo-val-list.csv"),
     )
-    discretizer = Discretizer(
-        timestep=1.0,
-        store_masks=False,
-        impute_strategy="previous",
-        start_time="relative",
-    )
-
-    discretizer_header = discretizer.create_header().split(",")
-    cont_channels = [
-        i for (i, x) in enumerate(discretizer_header) if x.find("->") == -1
-    ]
-
-    normalizer = Normalizer(fields=cont_channels)
-    # where does this comes from?
-    normalizer_state = "decomp_normalizer"
-    normalizer_state = os.path.join(args.data_path, normalizer_state)
-    normalizer.load_params(normalizer_state)
 
     train_data_gen = utils.BatchGenerator(
         train_data_loader, args.batch_size, shuffle=True
@@ -112,7 +91,7 @@ if __name__ == "__main__":
     model = StageNet(
         args.input_dim,
         args.hidden_dim,
-        args.K,
+        args.conv_size,
         args.output_dim,
         args.chunk_level,
         args.dropconnect_rate,

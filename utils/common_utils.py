@@ -5,34 +5,7 @@ import numpy as np
 import os
 import random
 import pandas as pd
-
-def sort_and_shuffle(data, batch_size):
-    """Sort data by the length and then make batches and shuffle them.
-    data is tuple (X1, X2, ..., Xn) all of them have the same length.
-    Usually data = (X, y).
-    """
-    assert len(data) >= 2
-    data = list(zip(*data))
-
-    random.shuffle(data)
-
-    old_size = len(data)
-    rem = old_size % batch_size
-    head = data[: old_size - rem]
-    tail = data[old_size - rem :]
-    data = []
-
-    head.sort(key=(lambda x: x[0].shape[0]))
-
-    mas = [head[i : i + batch_size] for i in range(0, len(head), batch_size)]
-    random.shuffle(mas)
-
-    for x in mas:
-        data += x
-    data += tail
-
-    data = list(zip(*data))
-    return data
+import threading
 
 class DeepSupervisionDataLoader:
     r"""
@@ -105,18 +78,18 @@ class DataLoader:
     ----------
     dataset_dir : str
         Directory where timeseries files are stored.
-    listfile : str
-        Path to a listfile. If this parameter is left `None` then
-        `dataset_dir/listfile.csv` will be used.
+    file_list : str
+        Path to a file_list. If this parameter is left `None` then
+        `dataset_dir/file_list.csv` will be used.
     """
 
-    def __init__(self, dataset_dir, listfile=None):
+    def __init__(self, dataset_dir, batch_size, file_list=None, shuffle=False):
         self._dataset_dir = dataset_dir
-        if listfile is None:
-            listfile_path = os.path.join(self._dataset_dir, "listfile.csv")
+        if file_list is None:
+            file_list_path = os.path.join(self._dataset_dir, "file_list.csv")
         else:
-            listfile_path = listfile
-        df = pd.read_csv(listfile_path)
+            file_list_path = file_list
+        df = pd.read_csv(file_list_path)
         df = df.sort_values(by=['stay', 'period_length'])
         group = df.groupby('stay').agg(list)
         
@@ -142,13 +115,67 @@ class DataLoader:
             data["mask"].append(np.ones_like(tmp))
             data["y"].append(y_true[file_name] * np.ones_like(tmp))
            
-        self._data = data
+        self.interval, self.names = data['interval'], data['name']
+        self.mask = data['mask']
+        self.data = [data["X"], data["y"]]
+        
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+        self.steps = (len(self.data[1]) + batch_size - 1) // batch_size
+        self.lock = threading.Lock()
+        self.generator = self._generator()
+
+    def _generator(self):
+        B = self.batch_size
+        while True:
+            if self.shuffle:
+                # stupid shuffle
+                N = len(self.data[1])
+                order = list(range(N))
+                random.shuffle(order)
+                tmp_data = [[None] * N, [None] * N]
+                tmp_names = [None] * N
+                tmp_interval = [None] * N
+                tmp_mask = [None] * N
+                for i in range(N):
+                    tmp_data[0][i] = self.data[0][order[i]]
+                    tmp_data[1][i] = self.data[1][order[i]]
+                    tmp_names[i] = self.names[order[i]]
+                    tmp_interval[i] = self.interval[order[i]]
+                    tmp_mask[i] = self.mask[order[i]]
+                self.data = tmp_data
+                self.names = tmp_names
+                self.interval = tmp_interval
+                self.mask = tmp_mask
+
+            for i in range(0, len(self.data[1]), B):
+                X = self.data[0][i : i + B]
+                y = self.data[1][i : i + B]
+                names = self.names[i : i + B]
+                interval = self.interval[i : i + B]
+                mask = self.mask[i : i + B]
+                X = pad_zeros(X)  # (B, T, D)
+                y = pad_zeros(y)
+                mask = pad_zeros(mask)
+                interval = pad_zeros(interval)
+                X = np.expand_dims(X, axis=-1)  # (B, T, 1)
+                y = np.expand_dims(y, axis=-1)  # (B, T, 1)         
+                interval = np.expand_dims(interval, axis=-1)  # (B, T, 1)
+                mask = np.expand_dims(mask, axis=-1)  # (B, T, 1)
+                batch_data = (X, y)
+                yield {"data": batch_data, "mask": mask, "names": names, "interval": interval}
+
+    def __iter__(self):
+        return self.generator
+
+    def next(self):
+        with self.lock:
+            return next(self.generator)
+
+    def __next__(self):
+        return self.next()
             
-def create_directory(directory):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-
 def pad_zeros(arr, min_length=None):
     """
     `arr` is an array of `np.array`s
