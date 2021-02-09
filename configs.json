@@ -43,11 +43,13 @@
     "loss": "bce_loss",
     "metrics": [
         "accuracy",
-        "sensitivity",
-        "specificity",
-        "precision",
-        "pr_auc",
-        "roc_auc"
+        "precision0",
+        "precision1",
+        "recall0",
+        "recall1",
+        "auroc",
+        "auprc",
+        "minpse"
      ],
     "lr_scheduler": {
         "type": "StepLR",
@@ -66,7 +68,7 @@
         "log_step": 1000,
         "class_weight_0": 1.0,
         "class_weight_1": 1.0,
-        "monitor": "max accuracy",
+        "monitor": "max train_auroc",
         "tensorboardX": false,
         "log_dir": "saved/runs"
     }
