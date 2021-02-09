@@ -6,7 +6,7 @@ from sklearn import metrics
 
 
 # for decompensation, in-hospital mortality
-def print_metrics_binary(y_true, predictions, verbose=True):
+def print_metrics_binary(y_true, predictions, verbose=False):
     predictions = np.array(predictions)
     if len(predictions.shape) == 1:
         predictions = np.stack([1 - predictions, predictions]).transpose((1, 0))

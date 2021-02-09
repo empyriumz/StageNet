@@ -1,14 +1,14 @@
 {
-    "name": "StageNet", 
+    "name": "stagenet", 
     "model": {
         "type": "StageNet",
-        "module_name": "model",
+        "module_name": "model.model",
         "args": { 
             "input_dim": 1,
             "hidden_dim": 384,
             "output_dim": 1,
             "conv_size": 10,
-            "chunk_level": 3,
+            "level": 3,
             "dropconnect_rate": 0.5,
             "dropout_rate": 0.5,
             "dropres_rate": 0.3
@@ -16,6 +16,7 @@
     },
     "train_data_loader": {
         "type": "DataLoader",
+        "module_name": "utils.utils",
         "args": {
             "dataset_dir": "./data/train",
             "batch_size": 256,
@@ -25,11 +26,12 @@
     },
     "val_data_loader": {
         "type": "DataLoader",
+        "module_name": "utils.utils",
         "args": {
             "dataset_dir": "./data/train",
             "batch_size": 256,
             "file_list": "demo-val-list.csv",
-            "shuffle": true
+            "shuffle": false
         }
     },
     "optimizer": {
@@ -59,11 +61,11 @@
         }
     },
     "trainer": {
-        "type": "ClassificationTrainer",
-        "module_name": "classification_trainer",
-        "epochs": 50,
-        "save_dir": "saved/",
-        "save_period": 10,
+        "type": "Trainer",
+        "module_name": "trainer",
+        "epochs": 6,
+        "save_dir": "saved_weights/",
+        "save_period": 3,
         "verbosity": 2000,
         "log_step": 1000,
         "class_weight_0": 1.0,

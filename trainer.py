@@ -7,6 +7,9 @@ import numpy as np
 from utils.visualization import WriterTensorboardX
 from utils import metrics
 
+def ensure_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 class Trainer:
     """
     Base class for all trainers
@@ -15,8 +18,6 @@ class Trainer:
     def __init__(
         self,
         model,
-        loss,
-        metrics,
         optimizer,
         resume,
         config,
@@ -36,8 +37,6 @@ class Trainer:
         self.train_data_loader = train_data_loader
         self.val_data_loader = val_data_loader
         self.lr_scheduler = lr_scheduler
-        self.loss = loss
-        self.metrics = metrics
         self.optimizer = optimizer
         self.train_logger = train_logger
 
@@ -47,7 +46,7 @@ class Trainer:
         self.verbosity = cfg_trainer["verbosity"]
         self.monitor = cfg_trainer.get("monitor", "off")
         self.log_step = cfg_trainer.get(
-            "log_step", int(np.sqrt(self.train_loader.batch_size))
+            "log_step", int(np.sqrt(self.train_data_loader.batch_size))
         )
         # configuration to monitor model performance and save best
         if self.monitor == "off":
@@ -67,6 +66,7 @@ class Trainer:
         self.checkpoint_dir = os.path.join(
             cfg_trainer["save_dir"], config["name"], start_time
         )
+        ensure_dir(self.checkpoint_dir)
         # setup visualization writer instance
         writer_dir = os.path.join(cfg_trainer["log_dir"], config["name"], start_time)
         self.writer = WriterTensorboardX(
@@ -75,6 +75,7 @@ class Trainer:
 
         # Save configuration file into checkpoint directory:
         config_save_path = os.path.join(self.checkpoint_dir, "config.json")
+        
         with open(config_save_path, "w") as handle:
             json.dump(config, handle, indent=4, sort_keys=False)
 
@@ -170,7 +171,7 @@ class Trainer:
                 1 - output + 1e-7
             )
             loss = torch.sum(loss, dim=1) / torch.sum(batch_mask, dim=1)
-            loss = torch.neg(torch.sum(loss)) / self.bach_size
+            loss = torch.neg(torch.sum(loss)) / self.train_data_loader.batch_size
             batch_loss.append(loss.cpu().detach().numpy())
 
             loss.backward()
@@ -198,9 +199,8 @@ class Trainer:
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
 
-        if self.do_validation:
-            val_log = self._valid_epoch(epoch)
-            log = {**log, **val_log}
+        val_log = self._valid_epoch(epoch)
+        log = {**log, **val_log}
         
         return log
     
@@ -238,7 +238,7 @@ class Trainer:
                     1 - valid_y
                 ) * torch.log(1 - valid_output + 1e-7)
                 valid_loss = torch.sum(valid_loss, dim=1) / torch.sum(valid_mask, dim=1)
-                valid_loss = torch.neg(torch.sum(valid_loss))
+                valid_loss = torch.neg(torch.sum(valid_loss))/ self.val_data_loader.batch_size
                 val_loss.append(valid_loss.cpu().detach().numpy())
 
                 for m, t, p in zip(
