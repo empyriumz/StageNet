@@ -1,0 +1,13 @@
+{
+    "test_data_loader": {
+        "type": "DataLoader",
+        "module_name": "utils.utils",
+        "args": {
+            "dataset_dir": "./data/test",
+            "batch_size": 256,
+            "file_list": "demo-test-list.csv",
+            "shuffle": true
+        }
+        },
+    "trained_model_path": "saved_weights/stagenet/0210_180233/model_best.pth"
+    }

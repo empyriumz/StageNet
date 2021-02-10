@@ -42,17 +42,6 @@
             "amsgrad": true
         }
     },
-    "loss": "bce_loss",
-    "metrics": [
-        "accuracy",
-        "precision0",
-        "precision1",
-        "recall0",
-        "recall1",
-        "auroc",
-        "auprc",
-        "minpse"
-     ],
     "lr_scheduler": {
         "type": "StepLR",
         "args": {
@@ -63,9 +52,9 @@
     "trainer": {
         "type": "Trainer",
         "module_name": "trainer",
-        "epochs": 6,
+        "epochs": 20,
         "save_dir": "saved_weights/",
-        "save_period": 3,
+        "save_period": 5,
         "verbosity": 2000,
         "log_step": 1000,
         "class_weight_0": 1.0,
