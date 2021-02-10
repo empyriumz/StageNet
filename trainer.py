@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from utils.visualization import WriterTensorboardX
 from utils import metrics
+from contextlib import redirect_stdout
 
 def ensure_dir(path):
     if not os.path.exists(path):
@@ -171,7 +172,7 @@ class Trainer:
                 1 - output + 1e-7
             )
             loss = torch.sum(loss, dim=1) / torch.sum(batch_mask, dim=1)
-            loss = torch.neg(torch.sum(loss)) / self.train_data_loader.batch_size
+            loss = torch.neg(torch.sum(loss))
             batch_loss.append(loss.cpu().detach().numpy())
 
             loss.backward()
@@ -192,19 +193,19 @@ class Trainer:
         train_result = {"train_"+key: value for key, value in result.items()}
         log = {
             "Epoch": epoch,
-            "train_loss": np.mean(np.array(batch_loss)),
+            "train_loss": np.mean(np.array(batch_loss) / len(self.train_data_loader)),
         }
         log = {**log, **train_result}
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
 
-        val_log = self._valid_epoch(epoch)
+        val_log = self._valid_epoch()
         log = {**log, **val_log}
         
         return log
     
-    def _valid_epoch(self, epoch):
+    def _valid_epoch(self):
         """
         Training logic for an epoch
 
@@ -238,7 +239,7 @@ class Trainer:
                     1 - valid_y
                 ) * torch.log(1 - valid_output + 1e-7)
                 valid_loss = torch.sum(valid_loss, dim=1) / torch.sum(valid_mask, dim=1)
-                valid_loss = torch.neg(torch.sum(valid_loss))/ self.val_data_loader.batch_size
+                valid_loss = torch.neg(torch.sum(valid_loss))
                 val_loss.append(valid_loss.cpu().detach().numpy())
 
                 for m, t, p in zip(
@@ -254,7 +255,7 @@ class Trainer:
         result = metrics.print_metrics_binary(valid_true, valid_pred)
         val_result = {"val_"+key: value for key, value in result.items()}
         log = {
-            "val_loss": np.mean(np.array(val_loss)),
+            "val_loss": np.mean(np.array(val_loss) / len(self.val_data_loader)),
         }
         log = {**log, **val_result}
         
@@ -284,11 +285,17 @@ class Trainer:
         torch.save(state, filename)
         self.logger.info("Saving checkpoint: {} ...".format(filename))
         if save_best:
-            best_name = "model_best_epoch_{}.pth".format(epoch)
+            best_name = "model_best.pth".format(epoch)
             best_path = os.path.join(self.checkpoint_dir, best_name)
             torch.save(state, best_path)
-            self.logger.info("Saving current best: {} ...".format(best_name))
-
+            self.logger.info("Saving current best: {} ...".format(epoch))
+        if epoch == self.epochs:
+            filename = os.path.join(self.checkpoint_dir, "training_log.txt")
+            print(self.train_logger)
+            with open(filename, 'w') as f:
+                with redirect_stdout(f):
+                    print(self.train_logger)
+    
     def _resume_checkpoint(self, resume_path):
         """
         Resume from saved checkpoints

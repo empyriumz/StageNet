@@ -177,6 +177,9 @@ class DataLoader:
 
     def __iter__(self):
         return self.generator
+    
+    def __len__(self):
+        return len(self.data[1])
 
     def next(self):
         with self.lock:
@@ -230,4 +233,4 @@ class Logger:
         self.entries[len(self.entries) + 1] = entry
 
     def __str__(self):
-        return json.dumps(self.entries, sort_keys=True, indent=4)
+        return json.dumps(str(self.entries), sort_keys=True, indent=4)
