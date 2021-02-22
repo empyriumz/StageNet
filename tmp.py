@@ -15,89 +15,63 @@ torch.backends.cudnn.deterministic = True
 
 from utils import utils
 from utils import metrics
-from utils import common_utils
 from model import StageNet
+
+import optuna
 
 
 def parse_arguments(parser):
-    parser.add_argument(
-        "--data_path",
-        type=str,
-        metavar="<data_path>",
-        help="The path to the MIMIC-III data directory",
-    )
-    parser.add_argument(
-        "--file_name", type=str, metavar="<data_path>", help="File name to save model"
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=256, help="Training batch size"
-    )
-    parser.add_argument("--epochs", type=int, default=10, help="Training epochs")
+    parser.add_argument("--epochs", type=int, default=5, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learing rate")
 
-    parser.add_argument(
-        "--input_dim", type=int, default=1, help="Dimension of visit record data"
-    )
-    parser.add_argument(
-        "--hidden_dim", type=int, default=384, help="Dimension of hidden units in RNN"
-    )
-    parser.add_argument(
-        "--output_dim", type=int, default=1, help="Dimension of prediction target"
-    )
-    parser.add_argument("--dropout_rate", type=float, default=0.5, help="Dropout rate")
-    parser.add_argument(
-        "--dropconnect_rate", type=float, default=0.5, help="Dropout rate in RNN"
-    )
-    parser.add_argument(
-        "--dropres_rate",
-        type=float,
-        default=0.3,
-        help="Dropout rate in residue connection",
-    )
-    parser.add_argument("--conv_size", type=int, default=10, help="Convolutional filter width")
-    parser.add_argument(
-        "--chunk_level", type=int, default=3, help="Value of parameter controlling the degree of coarse grain"
-    )
 
     args = parser.parse_args()
     return args
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    args = parse_arguments(parser)
-
-    """ Prepare training data"""
-    print("Preparing training data ... ")
-    train_data_loader = common_utils.DataLoader(
-        dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-list.csv"),
-    )
-    val_data_loader = common_utils.DataLoader(
-        dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-val-list.csv"),
-    )
-
-    train_data_gen = utils.BatchGenerator(
-        train_data_loader, args.batch_size, shuffle=True
-    )
-    val_data_gen = utils.BatchGenerator(val_data_loader, args.batch_size, shuffle=False)
-
-    """Model structure"""
-    print("Constructing model ... ")
-    device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
-    print("available device: {}".format(device))
+def define_model(trial):
+    input_dim, output_dim = 1, 1
+    hidden_dim = 384
+    conv_size = trial.suggest_int("conv_size", 1, 15, 3)
+    chunk_level = trial.suggest_int("chunk_level", 3, 6, 3)
+    dropconnect_rate = 0.5
+    dropout_rate = 0.5
+    dropres_rate = 0.3
 
     model = StageNet(
-        args.input_dim,
-        args.hidden_dim,
-        args.conv_size,
-        args.output_dim,
-        args.chunk_level,
-        args.dropconnect_rate,
-        args.dropout_rate,
-        args.dropres_rate,
-    ).to(device)
+        input_dim,
+        hidden_dim,
+        conv_size,
+        output_dim,
+        chunk_level,
+        dropconnect_rate,
+        dropout_rate,
+        dropres_rate,
+    )
+
+    return model
+
+
+def get_data(data_path, batch_size):
+    train_data_loader = utils.DataLoader(
+        dataset_dir=data_path,
+        batch_size=batch_size,
+        file_list="demo-list.csv",
+        shuffle=True,
+    )
+    val_data_loader = utils.DataLoader(
+        dataset_dir=data_path,
+        batch_size=batch_size,
+        file_list="demo-val-list.csv",
+        shuffle=False,
+    )
+
+    return train_data_loader, val_data_loader
+
+
+def objective(trial):
+    model = define_model(trial).to(device)
+    train_data_loader, val_data_loader = get_data("data/train", 256)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     """Train phase"""
@@ -106,15 +80,14 @@ if __name__ == "__main__":
     train_loss = []
     val_loss = []
     batch_loss = []
-    max_auprc = 0
+    # max_auprc = 0
 
-    file_name = "./saved_weights/" + args.file_name
+    # file_name = "./saved_weights/" + args.file_name
     for epoch in range(args.epochs):
         cur_batch_loss = []
         model.train()
-        for each_batch in range(train_data_gen.steps):
-            batch_data = next(train_data_gen)
-            batch_name = batch_data["names"]
+        for each_batch in range(train_data_loader.steps):
+            batch_data = next(train_data_loader)
             batch_interval = batch_data["interval"]
             batch_mask = batch_data["mask"]
             batch_x, batch_y = batch_data["data"]
@@ -159,9 +132,8 @@ if __name__ == "__main__":
             cur_val_loss = []
             valid_true = []
             valid_pred = []
-            for each_batch in range(val_data_gen.steps):
-                valid_data = next(val_data_gen)
-                valid_name = valid_data["names"]
+            for each_batch in range(val_data_loader.steps):
+                valid_data = next(val_data_loader)
                 valid_interval = valid_data["interval"]
                 valid_mask = valid_data["mask"]
                 valid_x, valid_y = valid_data["data"]
@@ -202,12 +174,56 @@ if __name__ == "__main__":
             valid_pred = np.stack([1 - valid_pred, valid_pred], axis=1)
             ret = metrics.print_metrics_binary(valid_true, valid_pred)
             cur_auprc = ret["auprc"]
-            if cur_auprc > max_auprc:
-                max_auprc = cur_auprc
-                state = {
-                    "net": model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                    "epoch": epoch,
-                }
-                torch.save(state, file_name)
-                print("\n------------ Save best model ------------\n")
+
+            # if cur_auprc > max_auprc:
+            #     max_auprc = cur_auprc
+            #     state = {
+            #         "net": model.state_dict(),
+            #         "optimizer": optimizer.state_dict(),
+            #         "epoch": epoch,
+            #     }
+            #     torch.save(state, file_name)
+            #     print("\n------------ Save best model ------------\n")
+
+            trial.report(cur_auprc, epoch)
+            if trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+
+    return cur_auprc
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    args = parse_arguments(parser)
+
+    """ Prepare training data"""
+    print("Preparing training data ... ")
+
+    """Model structure"""
+    print("Constructing model ... ")
+    device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
+    print("available device: {}".format(device))
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=10, timeout=1600)
+
+    pruned_trials = [
+        t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED
+    ]
+    complete_trials = [
+        t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+    ]
+
+    print("Study statistics: ")
+    print("  Number of finished trials: ", len(study.trials))
+    print("  Number of pruned trials: ", len(pruned_trials))
+    print("  Number of complete trials: ", len(complete_trials))
+
+    print("Best trial:")
+    trial = study.best_trial
+
+    print("  Value: ", trial.value)
+
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))

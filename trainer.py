@@ -11,6 +11,7 @@ from contextlib import redirect_stdout
 def ensure_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
 class Trainer:
     """
     Base class for all trainers
