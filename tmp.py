@@ -154,7 +154,6 @@ if __name__ == "__main__":
         model.train()
         for each_batch in range(train_data_gen.steps):
             batch_data = next(train_data_gen)
-            batch_name = batch_data["names"]
             batch_data = batch_data["data"]
 
             batch_x = torch.tensor(batch_data[0][0], dtype=torch.float32).to(device)
@@ -217,9 +216,7 @@ if __name__ == "__main__":
             valid_pred = []
             for each_batch in range(val_data_gen.steps):
                 valid_data = next(val_data_gen)
-                valid_name = valid_data["names"]
                 valid_data = valid_data["data"]
-
                 valid_x = torch.tensor(valid_data[0][0], dtype=torch.float32).to(device)
                 valid_mask = (
                     torch.tensor(valid_data[0][1], dtype=torch.float32)

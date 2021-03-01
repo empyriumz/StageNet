@@ -1,5 +1,6 @@
 # data and bert model
 data/
+mortality_data/
 pd-test.py
 test.ipynb
 saved_weights/
