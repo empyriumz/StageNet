@@ -75,12 +75,12 @@ if __name__ == "__main__":
     print("Preparing training data ... ")
     train_data_loader = common_utils.DeepSupervisionDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-list.csv"),
+        listfile=os.path.join(args.data_path, "demo-mortality.csv"),
         small_part=args.small_part,
     )
     val_data_loader = common_utils.DeepSupervisionDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-val-list.csv"),
+        listfile=os.path.join(args.data_path, "demo-mortality-val.csv"),
         small_part=args.small_part,
     )
     discretizer = Discretizer(

@@ -151,24 +151,21 @@ class DeepSupervisionDataLoader:
             self._data = lfile.readlines()[1:]  # skip the header
 
         self._data = [line.split(",") for line in self._data]
-        self._data = [(x, float(t), y) for (x, t, y) in self._data]
+        self._data = [(x, y) for (x, y) in self._data]
         self._data = sorted(self._data)
 
-        mas = {"X": [], "ts": [], "ys": [], "name": []}
+        mas = {"X": [], "ys": [], "name": []}
         i = 0
         while i < len(self._data):
             j = i
             cur_stay = self._data[i][0]
-            cur_ts = []
             cur_labels = []
             while j < len(self._data) and self._data[j][0] == cur_stay:
-                cur_ts.append(self._data[j][1])
-                cur_labels.append(self._data[j][2])
+                cur_labels.append(self._data[j][1])
                 j += 1
 
             cur_X = self._read_timeseries(cur_stay)
             mas["X"].append(cur_X)
-            mas["ts"].append(cur_ts)
             mas["ys"].append(cur_labels)
             mas["name"].append(cur_stay)
 
@@ -209,13 +206,12 @@ class DataLoader:
         else:
             listfile_path = listfile
         df = pd.read_csv(listfile_path)
-        df = df.sort_values(by=['stay', 'period_length'])
+        df = df.sort_values(by=['stay'])
         group = df.groupby('stay').agg(list)
         
-        mas = {"X": [], "ts": [], "ys": [], "name": []}
+        mas = {"X": [], "ys": [], "name": []}
         mas['name'] = list(group.index)
         mas["ys"] = group['y_true']
-        mas["ts"] = group['period_length']
         for file_name in mas['name']:
             tmp_df = pd.read_csv(self._dataset_dir+"/"+file_name)
             current_X = tmp_df.to_numpy()

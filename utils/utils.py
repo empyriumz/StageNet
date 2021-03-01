@@ -116,14 +116,12 @@ class BatchGenDeepSupervision(object):
 
         N = len(dataloader._data["X"])
         Xs = []
-        ts = []
         masks = []
         ys = []
         names = []
 
         for i in range(N):
             X = dataloader._data["X"][i]
-            current_t = dataloader._data["ts"][i]
             current_y = dataloader._data["ys"][i]
             name = dataloader._data["name"][i]
 
