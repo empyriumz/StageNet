@@ -98,7 +98,7 @@ class StageNet(nn.Module):
         out = torch.cat([h_out, f_master_gate[..., 0], i_master_gate[..., 0]], 1)
         return out, c_out, h_out
 
-    def forward(self, input, time, device):
+    def forward(self, input, time, output_step, device):
         batch_size, time_step, _ = input.size()
         c_out = torch.zeros(batch_size, self.hidden_dim).to(device)
         h_out = torch.zeros(batch_size, self.hidden_dim).to(device)
@@ -147,12 +147,13 @@ class StageNet(nn.Module):
         rnn_outputs = torch.stack(h).permute(1, 0, 2)
         if self.dropres > 0.0:
             origin_h = self.nn_dropres(origin_h)
-        rnn_outputs = rnn_outputs + origin_h
+        #output_step = time_step // 2
+        rnn_outputs = (rnn_outputs + origin_h)[:, -output_step:, :]
         rnn_outputs = rnn_outputs.contiguous().view(-1, rnn_outputs.size(-1))
         if self.dropout > 0.0:
             rnn_outputs = self.nn_dropout(rnn_outputs)
         output = self.nn_output(rnn_outputs)
-        output = output.contiguous().view(batch_size, time_step, self.output_dim)
+        output = output.contiguous().view(batch_size, output_step, self.output_dim)
         output = torch.sigmoid(output)
 
         return output, torch.stack(distance)

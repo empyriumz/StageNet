@@ -76,15 +76,12 @@ if __name__ == "__main__":
     train_data_loader = common_utils.DeepSupervisionDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
         listfile=os.path.join(args.data_path, "demo-mortality.csv"),
-        small_part=args.small_part,
     )
     val_data_loader = common_utils.DeepSupervisionDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
         listfile=os.path.join(args.data_path, "demo-mortality-val.csv"),
-        small_part=args.small_part,
     )
     discretizer = Discretizer(
-        timestep=1.0,
         store_masks=True,
         impute_strategy="previous",
         start_time="zero",
@@ -122,12 +119,12 @@ if __name__ == "__main__":
     print("Constructing model ... ")
     device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
     print("available device: {}".format(device))
-    
+
     if discretizer._store_masks:
         input_dim = args.input_dim + 17
     else:
         input_dim = args.input_dim
-        
+
     model = StageNet(
         input_dim,
         args.hidden_dim,
@@ -157,12 +154,13 @@ if __name__ == "__main__":
             batch_data = batch_data["data"]
 
             batch_x = torch.tensor(batch_data[0][0], dtype=torch.float32).to(device)
-            batch_mask = (
-                torch.tensor(batch_data[0][1], dtype=torch.float32)
-                .unsqueeze(-1)
-                .to(device)
-            )
+            # batch_mask = (
+            #     torch.tensor(batch_data[0][1], dtype=torch.float32)
+            #     .unsqueeze(-1)
+            #     .to(device)
+            # )
             batch_y = torch.tensor(batch_data[1], dtype=torch.float32).to(device)
+
             tmp = torch.zeros(batch_x.size(0), 17, dtype=torch.float32).to(device)
             batch_interval = torch.zeros(
                 (batch_x.size(0), batch_x.size(1), 17), dtype=torch.float32
@@ -178,24 +176,28 @@ if __name__ == "__main__":
                 batch_interval[:, i, :] = cur_ind * tmp
                 # so those with non-zero data at the moment, set the timer to zero
                 tmp[cur_ind == 1] = 0
-            
+
             # cut long sequence
-            if batch_mask.size()[1] > 400:
+            if batch_x.size()[1] > 400:
                 batch_x = batch_x[:, :400, :]
-                batch_mask = batch_mask[:, :400, :]
+                # batch_mask = batch_mask[:, :400, :]
                 batch_y = batch_y[:, :400, :]
                 batch_interval = batch_interval[:, :400, :]
 
+            batch_y = batch_y[:, 0, :]
+            output_step = batch_x.size()[1] // 2
+            #batch_y = batch_y[:, -output_step:, :]
             optimizer.zero_grad()
-            cur_output, _ = model(batch_x, batch_interval, device)
-            masked_output = cur_output * batch_mask
-            loss = batch_y * torch.log(masked_output + 1e-7) + (
-                1 - batch_y
-            ) * torch.log(1 - masked_output + 1e-7)
-            loss = torch.sum(loss, dim=1) / torch.sum(batch_mask, dim=1)
+            output, _ = model(batch_x, batch_interval, output_step, device)
+            output = output.mean(axis=1)
+            # masked_output = output * batch_mask
+            loss = batch_y * torch.log(output + 1e-7) + (1 - batch_y) * torch.log(
+                1 - output + 1e-7
+            )
+            #loss = torch.sum(loss, dim=1)
             loss = torch.neg(torch.sum(loss))
             cur_batch_loss.append(loss.cpu().detach().numpy())
-
+            
             loss.backward()
             optimizer.step()
 
@@ -218,11 +220,6 @@ if __name__ == "__main__":
                 valid_data = next(val_data_gen)
                 valid_data = valid_data["data"]
                 valid_x = torch.tensor(valid_data[0][0], dtype=torch.float32).to(device)
-                valid_mask = (
-                    torch.tensor(valid_data[0][1], dtype=torch.float32)
-                    .unsqueeze(-1)
-                    .to(device)
-                )
                 valid_y = torch.tensor(valid_data[1], dtype=torch.float32).to(device)
                 tmp = torch.zeros(valid_x.size(0), 17, dtype=torch.float32).to(device)
                 valid_interval = torch.zeros(
@@ -235,30 +232,31 @@ if __name__ == "__main__":
                     valid_interval[:, i, :] = cur_ind * tmp
                     tmp[cur_ind == 1] = 0
 
-                if valid_mask.size()[1] > 400:
+                if valid_x.size()[1] > 400:
                     valid_x = valid_x[:, :400, :]
-                    valid_mask = valid_mask[:, :400, :]
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
-
-                valid_output, valid_dis = model(valid_x, valid_interval, device)
-                masked_valid_output = valid_output * valid_mask
-
-                valid_loss = valid_y * torch.log(masked_valid_output + 1e-7) + (
+                
+                # valid_y = valid_y[:, 0, :].unsqueeze(dim=-1)
+                # valid_y = valid_y[:, -output_step:, :]
+                valid_y = valid_y[:, 0, :]
+                output_step = valid_x.size()[1] // 2
+                
+                valid_output, _ = model(valid_x, valid_interval, output_step, device)
+                valid_output = valid_output.mean(axis=1)
+                valid_loss = valid_y * torch.log(valid_output + 1e-7) + (
                     1 - valid_y
-                ) * torch.log(1 - masked_valid_output + 1e-7)
-                valid_loss = torch.sum(valid_loss, dim=1) / torch.sum(valid_mask, dim=1)
+                ) * torch.log(1 - valid_output + 1e-7)
+                #valid_loss = torch.sum(valid_loss, dim=1)
                 valid_loss = torch.neg(torch.sum(valid_loss))
                 cur_val_loss.append(valid_loss.cpu().detach().numpy())
 
-                for m, t, p in zip(
-                    valid_mask.cpu().numpy().flatten(),
+                for t, p in zip(
                     valid_y.cpu().numpy().flatten(),
                     valid_output.cpu().detach().numpy().flatten(),
                 ):
-                    if np.equal(m, 1):
-                        valid_true.append(t)
-                        valid_pred.append(p)
+                    valid_true.append(t)
+                    valid_pred.append(p)
 
             val_loss.append(np.mean(np.array(cur_val_loss)))
             print("Valid loss = %.4f" % (val_loss[-1]))

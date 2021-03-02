@@ -11,7 +11,6 @@ import os
 class Discretizer:
     def __init__(
         self,
-        timestep=0.8,
         store_masks=True,
         impute_strategy="zero",
         start_time="zero",
@@ -31,7 +30,6 @@ class Discretizer:
             self._normal_values = config["normal_values"]
 
         self._header = ["Hours"] + self._id_to_channel
-        self._timestep = timestep
         self._store_masks = store_masks
         self._start_time = start_time
         self._impute_strategy = impute_strategy
@@ -85,7 +83,7 @@ class Discretizer:
         else:
             max_hours = end - first_time
 
-        N_bins = int(max_hours / self._timestep + 1.0 - eps)
+        N_bins = X.shape[0]
 
         # record all data, both categorical and continous variables into one matrix "data"
         data = np.zeros(shape=(N_bins, self.vector_len), dtype=float)
@@ -107,27 +105,26 @@ class Discretizer:
             else:
                 data[bin_id, self.code_pos[channel_id]] = float(value)
 
-        for row in X:
+        for i, row in enumerate(X):
             t = float(row[0]) - first_time
             if t > max_hours + eps:
                 continue
-            bin_id = int(t / self._timestep - eps)
-            assert 0 <= bin_id < N_bins
-
+            
             for j in range(1, len(row)):
                 if row[j] == "":
+                #if row[j] != row[j]: # find NaN values
                     continue
                 channel = header[j]
                 channel_id = self._channel_to_id[channel]
 
                 total_data += 1
-                if mask[bin_id][channel_id] == 1:
+                if mask[i][channel_id] == 1:
                     unused_data += 1
                 # record position with non-zero data
-                mask[bin_id][channel_id] = 1
+                mask[i][channel_id] = 1
 
-                write(data, bin_id, channel, row[j])
-                original_value[bin_id][channel_id] = row[j]
+                write(data, i, channel, row[j])
+                original_value[i][channel_id] = row[j]
 
         # impute missing values
         if self._impute_strategy not in ["zero", "normal_value", "previous", "next"]:

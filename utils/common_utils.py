@@ -72,60 +72,6 @@ def sort_and_shuffle(data, batch_size):
 
     data = list(zip(*data))
     return data
-
-
-def add_common_arguments(parser):
-    """Add all the parameters which are common across the tasks"""
-    parser.add_argument("--network", type=str, required=True)
-    parser.add_argument("--dim", type=int, default=256, help="number of hidden units")
-    parser.add_argument("--depth", type=int, default=1, help="number of bi-LSTMs")
-    parser.add_argument(
-        "--epochs", type=int, default=100, help="number of chunks to train"
-    )
-    parser.add_argument("--load_state", type=str, default="", help="state file path")
-    parser.add_argument("--mode", type=str, default="train", help="mode: train or test")
-    parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--l2", type=float, default=0, help="L2 regularization")
-    parser.add_argument("--l1", type=float, default=0, help="L1 regularization")
-    parser.add_argument(
-        "--save_every", type=int, default=1, help="save state every x epoch"
-    )
-    parser.add_argument(
-        "--prefix", type=str, default="", help="optional prefix of network name"
-    )
-    parser.add_argument("--dropout", type=float, default=0.0)
-    parser.add_argument(
-        "--rec_dropout",
-        type=float,
-        default=0.0,
-        help="dropout rate for recurrent connections",
-    )
-    parser.add_argument(
-        "--batch_norm", type=bool, default=False, help="batch normalization"
-    )
-    parser.add_argument(
-        "--timestep", type=float, default=1.0, help="fixed timestep used in the dataset"
-    )
-    parser.add_argument("--imputation", type=str, default="previous")
-    parser.add_argument("--small_part", dest="small_part", action="store_true")
-    parser.add_argument("--whole_data", dest="small_part", action="store_false")
-    parser.add_argument("--optimizer", type=str, default="adam")
-    parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
-    parser.add_argument(
-        "--beta_1", type=float, default=0.9, help="beta_1 param for Adam optimizer"
-    )
-    parser.add_argument("--verbose", type=int, default=2)
-    parser.add_argument("--size_coef", type=float, default=4.0)
-    parser.add_argument(
-        "--normalizer_state",
-        type=str,
-        default=None,
-        help="Path to a state file of a normalizer. Leave none if you want to "
-        "use one of the provided ones.",
-    )
-    parser.set_defaults(small_part=False)
-
-
 class DeepSupervisionDataLoader:
     r"""
     Data loader for decompensation and length of stay task.
@@ -139,9 +85,32 @@ class DeepSupervisionDataLoader:
         Path to a listfile. If this parameter is left `None` then
         `dataset_dir/listfile.csv` will be used.
     """
+    
 
     def __init__(self, dataset_dir, listfile=None, small_part=False):
-
+        blacklist = [
+        # Criterion for exclusion: more than 1000 distinct timepoints
+        # In training data
+        '73129_episode2_timeseries.csv', '48123_episode2_timeseries.csv',
+        '76151_episode2_timeseries.csv', '41493_episode1_timeseries.csv',
+        '65565_episode1_timeseries.csv', '55205_episode1_timeseries.csv',
+        '41861_episode1_timeseries.csv', '58242_episode4_timeseries.csv',
+        '54073_episode1_timeseries.csv', '46156_episode1_timeseries.csv',
+        '55639_episode1_timeseries.csv', '89840_episode1_timeseries.csv',
+        '43459_episode1_timeseries.csv', '10694_episode2_timeseries.csv',
+        '51078_episode2_timeseries.csv', '90776_episode1_timeseries.csv',
+        '89223_episode1_timeseries.csv', '12831_episode2_timeseries.csv',
+        '80536_episode1_timeseries.csv',
+        # In validation data
+        '78515_episode1_timeseries.csv', '62239_episode2_timeseries.csv',
+        '58723_episode1_timeseries.csv', '40187_episode1_timeseries.csv',
+        '79337_episode1_timeseries.csv',
+        # In testing data
+        '51177_episode1_timeseries.csv', '70698_episode1_timeseries.csv',
+        '48935_episode1_timeseries.csv', '54353_episode2_timeseries.csv',
+        '19223_episode2_timeseries.csv', '58854_episode1_timeseries.csv',
+        '80345_episode1_timeseries.csv', '48380_episode1_timeseries.csv'
+        ]
         self._dataset_dir = dataset_dir
         if listfile is None:
             listfile_path = os.path.join(dataset_dir, "listfile.csv")
@@ -152,24 +121,21 @@ class DeepSupervisionDataLoader:
 
         self._data = [line.split(",") for line in self._data]
         self._data = [(x, y) for (x, y) in self._data]
-        self._data = sorted(self._data)
+        #self._data = sorted(self._data)
 
-        mas = {"X": [], "ys": [], "name": []}
-        i = 0
-        while i < len(self._data):
-            j = i
+        mas = {"X": [], "y": [], "name": [], "mask": []}
+        for i in range(len(self._data)):
             cur_stay = self._data[i][0]
-            cur_labels = []
-            while j < len(self._data) and self._data[j][0] == cur_stay:
-                cur_labels.append(self._data[j][1])
-                j += 1
-
+            if cur_stay in blacklist:
+                continue
+            cur_labels = int(self._data[i][1])
             cur_X = self._read_timeseries(cur_stay)
             mas["X"].append(cur_X)
-            mas["ys"].append(cur_labels)
+            mask = np.ones_like(cur_X[:, 0], dtype=int)
+            mas["mask"].append(mask)
+            y = cur_labels * np.ones_like(cur_X[:, 0], dtype=int)
+            mas["y"].append(y)
             mas["name"].append(cur_stay)
-
-            i = j
             if small_part and len(mas["name"]) == 256:
                 break
 
@@ -206,16 +172,17 @@ class DataLoader:
         else:
             listfile_path = listfile
         df = pd.read_csv(listfile_path)
-        df = df.sort_values(by=['stay'])
-        group = df.groupby('stay').agg(list)
-        
-        mas = {"X": [], "ys": [], "name": []}
-        mas['name'] = list(group.index)
-        mas["ys"] = group['y_true']
+        #df = df.sort_values(by=['stay'])
+        mas = {"X": [], "y": [], "name": [], "mask": []}
+        mas['name'] = df['stay'].values
+        mas["y"] = df['y_true'].values
         for file_name in mas['name']:
             tmp_df = pd.read_csv(self._dataset_dir+"/"+file_name)
+            tmp_df = tmp_df.dropna(how="all")
             current_X = tmp_df.to_numpy()
+            mask = np.ones_like(current_X[:, 0])
             mas["X"].append(current_X)
+            mas["mask"].append(mask)
         self._data = mas
             
 def create_directory(directory):
