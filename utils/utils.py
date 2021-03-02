@@ -1,10 +1,35 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
-from . import common_utils
 import threading
 import numpy as np
 import random
+
+def pad_zeros(arr, min_length=None):
+    """
+    `arr` is an array of `np.array`s
+
+    The function appends zeros to every `np.array` in `arr`
+    to equalize their first axis lenghts.
+    """
+    dtype = arr[0].dtype
+    max_len = max([x.shape[0] for x in arr])
+    ret = [
+        np.concatenate(
+            [x, np.zeros((max_len - x.shape[0],) + x.shape[1:], dtype=dtype)], axis=0
+        )
+        for x in arr
+    ]
+    if (min_length is not None) and ret[0].shape[0] < min_length:
+        ret = [
+            np.concatenate(
+                [x, np.zeros((min_length - x.shape[0],) + x.shape[1:], dtype=dtype)],
+                axis=0,
+            )
+            for x in ret
+        ]
+    return np.array(ret)
+
 class BatchGenDeepSupervision(object):
     def __init__(
         self,
@@ -82,9 +107,9 @@ class BatchGenDeepSupervision(object):
                 y = self.data[1][i : i + B]
                 names = self.names[i : i + B]
                
-                X = common_utils.pad_zeros(X)  # (B, T, D)
-                mask = common_utils.pad_zeros(mask)  # (B, T)
-                y = common_utils.pad_zeros(y)
+                X = pad_zeros(X)  # (B, T, D)
+                mask = pad_zeros(mask)  # (B, T)
+                y = pad_zeros(y)
                 y = np.expand_dims(y, axis=-1)  # (B, T, 1)
                 mask = np.expand_dims(mask, axis=-1)
                 batch_data = ([X, mask], y)
