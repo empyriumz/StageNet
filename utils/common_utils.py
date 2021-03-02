@@ -4,9 +4,9 @@ from __future__ import print_function
 import numpy as np
 import os
 import pandas as pd
-class DeepSupervisionDataLoader:
+class MortalityDataLoader:
     r"""
-    Data loader for decompensation and length of stay task.
+    Data loader for mortality prediction task.
     Reads all the data for one patient at once.
 
     Parameters
@@ -17,8 +17,6 @@ class DeepSupervisionDataLoader:
         Path to a listfile. If this parameter is left `None` then
         `dataset_dir/listfile.csv` will be used.
     """
-    
-
     def __init__(self, dataset_dir, listfile=None, small_part=False):
         blacklist = [
         # Criterion for exclusion: more than 1000 distinct timepoints
@@ -44,7 +42,8 @@ class DeepSupervisionDataLoader:
         '80345_episode1_timeseries.csv', '48380_episode1_timeseries.csv'
         ]
         self._dataset_dir = dataset_dir
-        with open(listfile, "r") as lfile:
+        self.listfile = listfile
+        with open(self.listfile, "r") as lfile:
             self._data = lfile.readlines()[1:]  # skip the header
 
         self._data = [line.split(",") for line in self._data]
@@ -99,7 +98,6 @@ class DataLoader:
         else:
             listfile_path = listfile
         df = pd.read_csv(listfile_path)
-        #df = df.sort_values(by=['stay'])
         mas = {"X": [], "y": [], "name": [], "mask": []}
         mas['name'] = df['stay'].values
         mas["y"] = df['y_true'].values

@@ -30,11 +30,11 @@ def pad_zeros(arr, min_length=None):
         ]
     return np.array(ret)
 
-class BatchGenDeepSupervision(object):
+class BatchDataGenerator(object):
     def __init__(
         self,
         dataloader,
-        discretizer,
+        encoder,
         normalizer,
         batch_size,
         shuffle,
@@ -44,13 +44,13 @@ class BatchGenDeepSupervision(object):
         self.shuffle = shuffle
         self.return_names = return_names
 
-        self._load_per_patient_data(dataloader, discretizer, normalizer)
+        self._load_per_patient_data(dataloader, encoder, normalizer)
 
         self.steps = (len(self.data[1]) + batch_size - 1) // batch_size
         self.lock = threading.Lock()
         self.generator = self._generator()
 
-    def _load_per_patient_data(self, dataloader, discretizer, normalizer):
+    def _load_per_patient_data(self, dataloader, encoder, normalizer):
 
         N = len(dataloader._data["X"])
         Xs = []
@@ -63,9 +63,8 @@ class BatchGenDeepSupervision(object):
             y = dataloader._data["y"][i]
             name = dataloader._data["name"][i]
             mask = dataloader._data["mask"][i]
-            # missing data is imputated?!
-            # what's the point of nsteps here and the bins within the discretizer.transform()?
-            X = discretizer.transform(X)
+            # one-hot encode categorical variables and imputate missing data
+            X = encoder.transform(X)
             if normalizer is not None:
                 X = normalizer.transform(X)
 

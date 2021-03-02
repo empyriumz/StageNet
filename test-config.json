@@ -1,0 +1,13 @@
+{
+    "test_data_loader": {
+        "type": "MortalityDataLoader",
+        "module_name": "utils.common_utils",
+        "args": {
+            "dataset_dir": "./data/test",
+            "batch_size": 256,
+            "file_list": "demo-test-list.csv",
+            "shuffle": false
+        }
+        },
+    "trained_model_path": "saved_weights/test-model"
+}

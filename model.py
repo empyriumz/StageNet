@@ -147,7 +147,6 @@ class StageNet(nn.Module):
         rnn_outputs = torch.stack(h).permute(1, 0, 2)
         if self.dropres > 0.0:
             origin_h = self.nn_dropres(origin_h)
-        #output_step = time_step // 2
         rnn_outputs = (rnn_outputs + origin_h)[:, -output_step:, :]
         rnn_outputs = rnn_outputs.contiguous().view(-1, rnn_outputs.size(-1))
         if self.dropout > 0.0:

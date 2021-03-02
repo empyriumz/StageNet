@@ -14,7 +14,7 @@ torch.cuda.manual_seed(RANDOM_SEED)
 torch.backends.cudnn.deterministic = True
 
 from utils import utils
-from utils.preprocessing import Discretizer, Normalizer
+from utils.preprocessing import OneHotEncoder, Normalizer
 from utils import metrics
 from utils import common_utils
 from model import StageNet
@@ -36,7 +36,7 @@ def parse_arguments(parser):
     parser.add_argument(
         "--batch_size", type=int, default=256, help="Training batch size"
     )
-    parser.add_argument("--epochs", type=int, default=10, help="Training epochs")
+    parser.add_argument("--epochs", type=int, default=20, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learing rate")
 
     parser.add_argument(
@@ -73,23 +73,23 @@ if __name__ == "__main__":
 
     """ Prepare training data"""
     print("Preparing training data ... ")
-    train_data_loader = common_utils.DeepSupervisionDataLoader(
+    train_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
         listfile=os.path.join(args.data_path, "train_mortality_listfile.csv"),
     )
-    val_data_loader = common_utils.DeepSupervisionDataLoader(
+    val_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
         listfile=os.path.join(args.data_path, "val_mortality_listfile.csv"),
     )
-    discretizer = Discretizer(
+    encoder = OneHotEncoder(
         store_masks=True,
         impute_strategy="previous",
         start_time="zero",
     )
 
-    discretizer_header = discretizer.create_header().split(",")
+    encoder_header = encoder.create_header().split(",")
     cont_channels = [
-        i for (i, x) in enumerate(discretizer_header) if x.find("->") == -1
+        i for (i, x) in enumerate(encoder_header) if x.find("->") == -1
     ]
 
     normalizer = Normalizer(fields=cont_channels)
@@ -98,17 +98,17 @@ if __name__ == "__main__":
     normalizer_state = os.path.join(args.data_path, normalizer_state)
     normalizer.load_params(normalizer_state)
 
-    train_data_gen = utils.BatchGenDeepSupervision(
+    train_data_gen = utils.BatchDataGenerator(
         train_data_loader,
-        discretizer,
+        encoder,
         normalizer,
         args.batch_size,
         shuffle=True,
         return_names=True,
     )
-    val_data_gen = utils.BatchGenDeepSupervision(
+    val_data_gen = utils.BatchDataGenerator(
         val_data_loader,
-        discretizer,
+        encoder,
         normalizer,
         args.batch_size,
         shuffle=False,
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
     print("available device: {}".format(device))
 
-    if discretizer._store_masks:
+    if encoder._store_masks:
         input_dim = args.input_dim + 17
     else:
         input_dim = args.input_dim
@@ -135,6 +135,7 @@ if __name__ == "__main__":
         args.dropout_rate,
         args.dropres_rate,
     ).to(device)
+    
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     """Train phase"""
@@ -142,23 +143,16 @@ if __name__ == "__main__":
 
     train_loss = []
     val_loss = []
-    batch_loss = []
     max_auprc = 0
 
     file_name = "./saved_weights/" + args.file_name
     for epoch in range(args.epochs):
-        cur_batch_loss = []
+        batch_loss = []
         model.train()
         for each_batch in range(train_data_gen.steps):
             batch_data = next(train_data_gen)
             batch_data = batch_data["data"]
-
             batch_x = torch.tensor(batch_data[0][0], dtype=torch.float32).to(device)
-            # batch_mask = (
-            #     torch.tensor(batch_data[0][1], dtype=torch.float32)
-            #     .unsqueeze(-1)
-            #     .to(device)
-            # )
             batch_y = torch.tensor(batch_data[1], dtype=torch.float32).to(device)
 
             tmp = torch.zeros(batch_x.size(0), 17, dtype=torch.float32).to(device)
@@ -180,35 +174,26 @@ if __name__ == "__main__":
             # cut long sequence
             if batch_x.size()[1] > 400:
                 batch_x = batch_x[:, :400, :]
-                # batch_mask = batch_mask[:, :400, :]
                 batch_y = batch_y[:, :400, :]
                 batch_interval = batch_interval[:, :400, :]
 
             batch_y = batch_y[:, 0, :]
             output_step = batch_x.size()[1] // 2
-            #batch_y = batch_y[:, -output_step:, :]
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, output_step, device)
             output = output.mean(axis=1)
-            # masked_output = output * batch_mask
             loss = batch_y * torch.log(output + 1e-7) + (1 - batch_y) * torch.log(
                 1 - output + 1e-7
             )
-            #loss = torch.sum(loss, dim=1)
             loss = torch.neg(torch.sum(loss))
-            cur_batch_loss.append(loss.cpu().detach().numpy())
+            batch_loss.append(loss.cpu().detach().numpy())
             
             loss.backward()
             optimizer.step()
-
-            if each_batch % 50 == 0:
-                print(
-                    "epoch %d, Batch %d: Loss = %.4f"
-                    % (epoch, each_batch, cur_batch_loss[-1])
-                )
-
-        batch_loss.append(cur_batch_loss)
-        train_loss.append(np.mean(np.array(cur_batch_loss)))
+        
+        epoch_loss = np.mean(np.array(batch_loss))
+        print("Epoch: {}, Training loss = {:.6f}".format(epoch, epoch_loss))
+        train_loss.append(epoch_loss)
 
         print("\n==>Predicting on validation")
         with torch.no_grad():
@@ -237,17 +222,13 @@ if __name__ == "__main__":
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
                 
-                # valid_y = valid_y[:, 0, :].unsqueeze(dim=-1)
-                # valid_y = valid_y[:, -output_step:, :]
                 valid_y = valid_y[:, 0, :]
                 output_step = valid_x.size()[1] // 2
-                
                 valid_output, _ = model(valid_x, valid_interval, output_step, device)
                 valid_output = valid_output.mean(axis=1)
                 valid_loss = valid_y * torch.log(valid_output + 1e-7) + (
                     1 - valid_y
                 ) * torch.log(1 - valid_output + 1e-7)
-                #valid_loss = torch.sum(valid_loss, dim=1)
                 valid_loss = torch.neg(torch.sum(valid_loss))
                 cur_val_loss.append(valid_loss.cpu().detach().numpy())
 
@@ -258,8 +239,8 @@ if __name__ == "__main__":
                     valid_true.append(t)
                     valid_pred.append(p)
 
-            val_loss.append(np.mean(np.array(cur_val_loss)))
-            print("Valid loss = %.4f" % (val_loss[-1]))
+            val_loss = np.mean(np.array(cur_val_loss))
+            print("Validation loss = {:.6f}",format(val_loss))
             print("\n")
             valid_pred = np.array(valid_pred)
             valid_pred = np.stack([1 - valid_pred, valid_pred], axis=1)

@@ -8,7 +8,7 @@ import json
 import os
 
 
-class Discretizer:
+class OneHotEncoder:
     def __init__(
         self,
         store_masks=True,
