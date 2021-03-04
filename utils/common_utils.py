@@ -49,20 +49,16 @@ class MortalityDataLoader:
         self._data = [line.split(",") for line in self._data]
         self._data = [(x, y) for (x, y) in self._data]
     
-        mas = {"X": [], "y": [], "name": [], "mask": []}
+        mas = {"X": [], "y": []}
         for i in range(len(self._data)):
             cur_stay = self._data[i][0]
             if cur_stay in blacklist:
                 continue
-            cur_labels = int(self._data[i][1])
+            y_labels = int(self._data[i][1])
             cur_X = self._read_timeseries(cur_stay)
             mas["X"].append(cur_X)
-            mask = np.ones_like(cur_X[:, 0], dtype=int)
-            mas["mask"].append(mask)
-            y = cur_labels * np.ones_like(cur_X[:, 0], dtype=int)
-            mas["y"].append(y)
-            mas["name"].append(cur_stay)
-            if small_part and len(mas["name"]) == 256:
+            mas["y"].append(y_labels)
+            if small_part and len(mas["y"]) == 256:
                 break
 
         self._data = mas

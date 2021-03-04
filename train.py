@@ -94,7 +94,7 @@ if __name__ == "__main__":
     cont_channels = [
         i for (i, x) in enumerate(encoder_header) if x.find("->") == -1
     ]
-
+    cont_channels = cont_channels + list(range(59, 59+17))
     normalizer = Normalizer(fields=cont_channels)
     normalizer_state = "utils/resources/mortality_normalizer.pkl"
     normalizer.load_params(normalizer_state)
@@ -105,7 +105,6 @@ if __name__ == "__main__":
         normalizer,
         args.batch_size,
         shuffle=True,
-        return_names=True,
     )
     val_data_gen = utils.BatchDataGenerator(
         val_data_loader,
@@ -113,7 +112,6 @@ if __name__ == "__main__":
         normalizer,
         args.batch_size,
         shuffle=False,
-        return_names=True,
     )
 
     """Model structure"""
@@ -155,30 +153,16 @@ if __name__ == "__main__":
             batch_data = batch_data["data"]
             batch_x = torch.tensor(batch_data[0][0], dtype=torch.float32).to(device)
             batch_y = torch.tensor(batch_data[1], dtype=torch.float32).to(device)
-
-            tmp = torch.zeros(batch_x.size(0), 17, dtype=torch.float32).to(device)
-            batch_interval = torch.zeros(
-                (batch_x.size(0), batch_x.size(1), 17), dtype=torch.float32
-            ).to(device)
-
-            for i in range(batch_x.size(1)):
-                # go over time direction
-                # cur_ind represents the mask part in the data
-                cur_ind = batch_x[:, i, -17:]
-                # identify the empty data spot and accumulate
-                tmp += (cur_ind == 0).float()
-                # keeps track of the the interval from last non-zero data
-                batch_interval[:, i, :] = cur_ind * tmp
-                # so those with non-zero data at the moment, set the timer to zero
-                tmp[cur_ind == 1] = 0
-
+            batch_y = batch_data[1]
+            batch_y = batch_y[:, 0, :]
             # cut long sequence
             if batch_x.size()[1] > 400:
                 batch_x = batch_x[:, :400, :]
                 batch_y = batch_y[:, :400, :]
-                batch_interval = batch_interval[:, :400, :]
-
-            batch_y = batch_y[:, 0, :]
+                
+            batch_x = batch_x[:, :, :-17]
+            batch_interval = batch_x[:, :, -17:]
+            
             output_step = batch_x.size()[1] // args.div
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, output_step, device)
@@ -255,4 +239,4 @@ if __name__ == "__main__":
                     "epoch": epoch,
                 }
                 torch.save(state, file_name)
-                print("\n------------ Save best model ------------\n")
+                print("\n------------ Save the best model ------------\n")

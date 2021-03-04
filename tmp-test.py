@@ -96,11 +96,10 @@ if __name__ == "__main__":
         normalizer,
         args.batch_size,
         shuffle=False,
-        return_names=True,
     )
 
     """Model structure"""
-    print("Constructing model ... ")
+    print("Loading model ... ")
     device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
     print("available device: {}".format(device))
 

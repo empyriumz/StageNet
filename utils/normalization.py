@@ -23,7 +23,6 @@ data_gen = BatchDataGenerator(
         None,
         256,
         shuffle=True,
-        return_names=True,
     )
 
 mean = []
