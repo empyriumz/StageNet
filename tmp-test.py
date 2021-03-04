@@ -73,10 +73,10 @@ if __name__ == "__main__":
     """ Prepare test data"""
     test_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "test"),
-        listfile=os.path.join(args.data_path, "test_mortality_listfile.csv"),
+        listfile=os.path.join(args.data_path, "test-mortality.csv"),
     )
     encoder = OneHotEncoder(
-        store_masks=True,
+        store_masks=False,
         impute_strategy="previous",
         start_time="zero",
     )
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    file_name = 'saved_weights/full-data-original-mortality-folder'
+    file_name = 'saved_weights/test-normalizer-full'
     checkpoint = torch.load(file_name) 
     saved_epoch = checkpoint['epoch']
     print("last saved model is epoch {}".format(saved_epoch))

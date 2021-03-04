@@ -77,14 +77,14 @@ if __name__ == "__main__":
     print("Preparing training data ... ")
     train_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-mortality.csv"),
+        listfile=os.path.join(args.data_path, "train-mortality.csv"),
     )
     val_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-mortality-val.csv"),
+        listfile=os.path.join(args.data_path, "val-mortality.csv"),
     )
     encoder = OneHotEncoder(
-        store_masks=True,
+        store_masks=False,
         impute_strategy="previous",
         start_time="zero",
     )
@@ -144,7 +144,7 @@ if __name__ == "__main__":
 
     train_loss = []
     val_loss = []
-    max_auprc = 0
+    max_auroc = 0
 
     file_name = "./saved_weights/" + args.file_name
     for epoch in range(args.epochs):
@@ -246,9 +246,9 @@ if __name__ == "__main__":
             valid_pred = np.array(valid_pred)
             valid_pred = np.stack([1 - valid_pred, valid_pred], axis=1)
             ret = metrics.print_metrics_binary(valid_true, valid_pred)
-            cur_auprc = ret["auprc"]
-            if cur_auprc > max_auprc:
-                max_auprc = cur_auprc
+            cur_auroc = ret["auroc"]
+            if cur_auroc > max_auroc:
+                max_auroc = cur_auroc
                 state = {
                     "net": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
