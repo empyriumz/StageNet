@@ -25,6 +25,7 @@ def parse_arguments(parser):
         "--data_path",
         type=str,
         metavar="<data_path>",
+        default="./mortality_data",
         help="The path to the MIMIC-III data directory",
     )
     parser.add_argument(
@@ -58,10 +59,11 @@ def parse_arguments(parser):
         default=0.3,
         help="Dropout rate in residue connection",
     )
-    parser.add_argument("--K", type=int, default=10, help="Value of hyper-parameter K")
+    parser.add_argument("--K", type=int, default=10, help="1D-conv filter size")   
     parser.add_argument(
-        "--chunk_level", type=int, default=3, help="Value of hyper-parameter K"
+        "--chunk_level", type=int, default=3, help="Value controlling the coarse grain level"
     )
+    parser.add_argument("--div", type=int, default=1, help="divide the input time step to get output time step")
 
     args = parser.parse_args()
     return args
@@ -75,11 +77,11 @@ if __name__ == "__main__":
     print("Preparing training data ... ")
     train_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "train_mortality_listfile.csv"),
+        listfile=os.path.join(args.data_path, "demo-mortality.csv"),
     )
     val_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "val_mortality_listfile.csv"),
+        listfile=os.path.join(args.data_path, "demo-mortality-val.csv"),
     )
     encoder = OneHotEncoder(
         store_masks=True,
@@ -88,14 +90,13 @@ if __name__ == "__main__":
     )
 
     encoder_header = encoder.create_header().split(",")
+    # select non-categorical channels 
     cont_channels = [
         i for (i, x) in enumerate(encoder_header) if x.find("->") == -1
     ]
 
     normalizer = Normalizer(fields=cont_channels)
-    # where does this comes from?
-    normalizer_state = "decomp_normalizer"
-    normalizer_state = os.path.join(args.data_path, normalizer_state)
+    normalizer_state = "utils/resources/mortality_normalizer.pkl"
     normalizer.load_params(normalizer_state)
 
     train_data_gen = utils.BatchDataGenerator(
@@ -178,14 +179,14 @@ if __name__ == "__main__":
                 batch_interval = batch_interval[:, :400, :]
 
             batch_y = batch_y[:, 0, :]
-            output_step = batch_x.size()[1] // 2
+            output_step = batch_x.size()[1] // args.div
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, output_step, device)
             output = output.mean(axis=1)
             loss = batch_y * torch.log(output + 1e-7) + (1 - batch_y) * torch.log(
                 1 - output + 1e-7
             )
-            loss = torch.neg(torch.sum(loss))
+            loss = torch.neg(torch.sum(loss)) / batch_x.size()[0]
             batch_loss.append(loss.cpu().detach().numpy())
             
             loss.backward()
@@ -223,13 +224,13 @@ if __name__ == "__main__":
                     valid_interval = valid_interval[:, :400, :]
                 
                 valid_y = valid_y[:, 0, :]
-                output_step = valid_x.size()[1] // 2
+                output_step = valid_x.size()[1] // args.div
                 valid_output, _ = model(valid_x, valid_interval, output_step, device)
                 valid_output = valid_output.mean(axis=1)
                 valid_loss = valid_y * torch.log(valid_output + 1e-7) + (
                     1 - valid_y
                 ) * torch.log(1 - valid_output + 1e-7)
-                valid_loss = torch.neg(torch.sum(valid_loss))
+                valid_loss = torch.neg(torch.sum(valid_loss)) / valid_x.size()[0]
                 cur_val_loss.append(valid_loss.cpu().detach().numpy())
 
                 for t, p in zip(
@@ -240,7 +241,7 @@ if __name__ == "__main__":
                     valid_pred.append(p)
 
             val_loss = np.mean(np.array(cur_val_loss))
-            print("Validation loss = {:.6f}",format(val_loss))
+            print("Validation loss = {:.6f}".format(val_loss))
             print("\n")
             valid_pred = np.array(valid_pred)
             valid_pred = np.stack([1 - valid_pred, valid_pred], axis=1)

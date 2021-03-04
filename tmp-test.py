@@ -24,14 +24,12 @@ def parse_arguments(parser):
     parser.add_argument(
         "--data_path",
         type=str,
+        default="./mortality_data",
         metavar="<data_path>",
         help="The path to the MIMIC-III data directory",
     )
     parser.add_argument(
-        "--file_name", type=str, metavar="<data_path>", help="File name to save model"
-    )
-    parser.add_argument(
-        "--small_part", type=int, default=0, help="Use part of training data"
+        "--file_name", type=str, metavar="<data_path>", help="File name to load the trainded model"
     )
     parser.add_argument(
         "--batch_size", type=int, default=256, help="Training batch size"
@@ -58,10 +56,11 @@ def parse_arguments(parser):
         default=0.3,
         help="Dropout rate in residue connection",
     )
-    parser.add_argument("--K", type=int, default=10, help="Value of hyper-parameter K")
+    parser.add_argument("--K", type=int, default=10, help="1D-conv filter size")   
     parser.add_argument(
-        "--chunk_level", type=int, default=3, help="Value of hyper-parameter K"
+        "--chunk_level", type=int, default=3, help="Value controlling the coarse grain level"
     )
+    parser.add_argument("--div", type=int, default=2, help="divide the input time step to get output time step")
 
     args = parser.parse_args()
     return args
@@ -74,7 +73,7 @@ if __name__ == "__main__":
     """ Prepare test data"""
     test_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "test"),
-        listfile=os.path.join(args.data_path, "demo-mortality-test.csv"),
+        listfile=os.path.join(args.data_path, "test_mortality_listfile.csv"),
     )
     encoder = OneHotEncoder(
         store_masks=True,
@@ -88,9 +87,7 @@ if __name__ == "__main__":
     ]
 
     normalizer = Normalizer(fields=cont_channels)
-    # where does this comes from?
-    normalizer_state = "decomp_normalizer"
-    normalizer_state = os.path.join(args.data_path, normalizer_state)
+    normalizer_state = "utils/resources/mortality_normalizer.pkl"
     normalizer.load_params(normalizer_state)
 
     test_data_gen = utils.BatchDataGenerator(
@@ -125,7 +122,7 @@ if __name__ == "__main__":
     
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    file_name = 'saved_weights/test-model'
+    file_name = 'saved_weights/full-data-original-mortality-folder'
     checkpoint = torch.load(file_name) 
     saved_epoch = checkpoint['epoch']
     print("last saved model is epoch {}".format(saved_epoch))
@@ -160,13 +157,13 @@ if __name__ == "__main__":
                 test_interval = test_interval[:, :400, :]
             
             test_y = test_y[:, 0, :]
-            output_step = test_x.size()[1] // 2
+            output_step = test_x.size()[1] // args.div
             test_output, _ = model(test_x, test_interval, output_step, device)
             test_output = test_output.mean(axis=1)
             loss = test_y * torch.log(test_output + 1e-7) + (
                 1 - test_y
             ) * torch.log(1 - test_output + 1e-7)
-            loss = torch.neg(torch.sum(loss))
+            loss = torch.neg(torch.sum(loss)) / test_x.size()[0]
             test_loss.append(loss.cpu().detach().numpy())
 
             for t, p in zip(
@@ -177,7 +174,7 @@ if __name__ == "__main__":
                 test_pred.append(p)
 
         test_loss = np.mean(np.array(test_loss))
-        print("Test loss = {:.6f}",format(test_loss))
+        print("Test loss = {:.6f}".format(test_loss))
         print("\n")
         test_pred = np.array(test_pred)
         test_pred = np.stack([1 - test_pred, test_pred], axis=1)
