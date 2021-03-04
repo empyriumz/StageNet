@@ -27,9 +27,9 @@ data_gen = BatchDataGenerator(
 
 mean = []
 std = []
-for k in range(data_gen.data[0][0][0].shape[1]): # total feature dimensions after one-hot encoding
+for k in range(data_gen.data[0][0].shape[1]): # total feature dimensions after one-hot encoding
     j = []
-    for i in data_gen.data[0][0]:
+    for i in data_gen.data[0]:
         j.append(i[:, k])
     out = np.concatenate(j).ravel()
     mean.append(out.mean())
@@ -38,5 +38,5 @@ for k in range(data_gen.data[0][0][0].shape[1]): # total feature dimensions afte
 data = {"mean": mean, "std": std}
 
 
-with open('./resources/mortality_normalizer.pkl', 'wb') as f:
+with open('./resources/mortality_normalizer_with_interval.pkl', 'wb') as f:
     pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)

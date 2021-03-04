@@ -37,7 +37,7 @@ class BatchDataGenerator(object):
         encoder,
         normalizer,
         batch_size,
-        shuffle,
+        shuffle=False,
     ):
         self.batch_size = batch_size
         self.shuffle = shuffle
@@ -58,23 +58,9 @@ class BatchDataGenerator(object):
             y = dataloader._data["y"][i]
 
             # one-hot encode categorical variables and imputate missing data
-            X = encoder.transform(X)
-            
-            # calculate intervals between measurements for each feature
-            intervals = np.zeros((X.shape[0], 17))
-            tmp = np.zeros(17)
-            for i in range(X.shape[1]):
-                # go over time direction
-                # cur_ind represents the mask part in the data
-                cur_ind = X[i, -17:]
-                # identify the empty data spot and accumulate
-                tmp += (cur_ind == 0)
-                # keeps track of the the interval from last non-zero data
-                intervals[i, :] = cur_ind * tmp
-                # so those with non-zero data at the moment, set the timer to zero
-                tmp[cur_ind == 1] = 0
-            
-            X = np.hstack([X, intervals.astype(np.float32)])
+            X, interval, _ = encoder.transform(X)
+            interval = np.repeat(interval, 17).reshape(-1, 17)  
+            X = np.hstack([X, interval])
             if normalizer is not None:
                 X = normalizer.transform(X)
 
@@ -107,7 +93,7 @@ class BatchDataGenerator(object):
      
                 X = pad_zeros(X)  # (B, T, D)
                 #y = pad_zeros(y)
-                #y = np.expand_dims(y, axis=-1)  # (B, T, 1)
+                y = np.expand_dims(y, axis=-1)  # (B, T, 1)
                 batch_data = (X, y)
                 
                 yield {"data": batch_data}

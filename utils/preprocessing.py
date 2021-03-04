@@ -68,6 +68,7 @@ class OneHotEncoder:
 
         N_channels = len(self._id_to_channel)
         ts = [float(row[0]) for row in X]
+        interval = np.diff(ts, prepend=ts[0])
         for i in range(len(ts) - 1):
             assert ts[i] < ts[i + 1] + eps
 
@@ -170,9 +171,9 @@ class OneHotEncoder:
         self._empty_bins_sum += empty_bins / (N_bins + eps)
         self._unused_data_sum += unused_data / (total_data + eps)
 
-        if self._store_masks:
-            data = np.hstack([data, mask.astype(np.float32)])
-        return data
+        # if self._store_masks:
+        #     data = np.hstack([data, mask.astype(np.float32)])
+        return data, interval, mask.astype(np.float32)
 
     def create_header(self):
         header = []

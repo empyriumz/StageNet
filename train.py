@@ -77,11 +77,11 @@ if __name__ == "__main__":
     print("Preparing training data ... ")
     train_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "train-mortality.csv"),
+        listfile=os.path.join(args.data_path, "demo-mortality.csv"),
     )
     val_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "val-mortality.csv"),
+        listfile=os.path.join(args.data_path, "demo-mortality-val.csv"),
     )
     encoder = OneHotEncoder(
         store_masks=False,
@@ -94,9 +94,9 @@ if __name__ == "__main__":
     cont_channels = [
         i for (i, x) in enumerate(encoder_header) if x.find("->") == -1
     ]
-    cont_channels = cont_channels + list(range(59, 59+17))
+    #cont_channels = cont_channels + list(range(59,76))
     normalizer = Normalizer(fields=cont_channels)
-    normalizer_state = "utils/resources/mortality_normalizer.pkl"
+    normalizer_state = "utils/resources/mortality_normalizer_with_interval.pkl"
     normalizer.load_params(normalizer_state)
 
     train_data_gen = utils.BatchDataGenerator(
@@ -151,22 +151,29 @@ if __name__ == "__main__":
         for each_batch in range(train_data_gen.steps):
             batch_data = next(train_data_gen)
             batch_data = batch_data["data"]
-            batch_x = torch.tensor(batch_data[0][0], dtype=torch.float32).to(device)
-            batch_y = torch.tensor(batch_data[1], dtype=torch.float32).to(device)
+            batch_x = batch_data[0]
             batch_y = batch_data[1]
-            batch_y = batch_y[:, 0, :]
+            # separate input data and time interval
+            # because the interval data will be feed into hidden states and 
+            # input gate as well
+            batch_interval = batch_x[:, :, -17:]  
+            batch_x = batch_x[:, :, :-17]
+                 
+            batch_x = torch.tensor(batch_x, dtype=torch.float32).to(device)
+            batch_y = torch.tensor(batch_y, dtype=torch.float32).to(device)
+            batch_interval = torch.tensor(batch_interval, dtype=torch.float32).to(device)
+            
             # cut long sequence
             if batch_x.size()[1] > 400:
                 batch_x = batch_x[:, :400, :]
                 batch_y = batch_y[:, :400, :]
-                
-            batch_x = batch_x[:, :, :-17]
-            batch_interval = batch_x[:, :, -17:]
-            
+                batch_interval = batch_interval[:, :400, :]
+                      
             output_step = batch_x.size()[1] // args.div
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, output_step, device)
             output = output.mean(axis=1)
+            #TODO: adding weight to the loss function
             loss = batch_y * torch.log(output + 1e-7) + (1 - batch_y) * torch.log(
                 1 - output + 1e-7
             )
@@ -189,25 +196,20 @@ if __name__ == "__main__":
             for each_batch in range(val_data_gen.steps):
                 valid_data = next(val_data_gen)
                 valid_data = valid_data["data"]
-                valid_x = torch.tensor(valid_data[0][0], dtype=torch.float32).to(device)
-                valid_y = torch.tensor(valid_data[1], dtype=torch.float32).to(device)
-                tmp = torch.zeros(valid_x.size(0), 17, dtype=torch.float32).to(device)
-                valid_interval = torch.zeros(
-                    (valid_x.size(0), valid_x.size(1), 17), dtype=torch.float32
-                ).to(device)
-
-                for i in range(valid_x.size(1)):
-                    cur_ind = valid_x[:, i, -17:]
-                    tmp += (cur_ind == 0).float()
-                    valid_interval[:, i, :] = cur_ind * tmp
-                    tmp[cur_ind == 1] = 0
-
+                valid_x = valid_data[0]
+                valid_y = valid_data[1]
+                valid_interval = valid_x[:, :, -17:]  
+                valid_x = valid_x[:, :, :-17]
+                    
+                valid_x = torch.tensor(valid_x, dtype=torch.float32).to(device)
+                valid_y = torch.tensor(valid_y, dtype=torch.float32).to(device)
+                valid_interval = torch.tensor(valid_interval, dtype=torch.float32).to(device)
+                
                 if valid_x.size()[1] > 400:
                     valid_x = valid_x[:, :400, :]
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
                 
-                valid_y = valid_y[:, 0, :]
                 output_step = valid_x.size()[1] // args.div
                 valid_output, _ = model(valid_x, valid_interval, output_step, device)
                 valid_output = valid_output.mean(axis=1)
