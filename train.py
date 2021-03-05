@@ -98,7 +98,7 @@ if __name__ == "__main__":
     cont_channels = [
         i for (i, x) in enumerate(encoder_header) if x.find("->") == -1
     ]
-    #cont_channels = cont_channels + list(range(59,76))
+    #cont_channels = cont_channels + [59]
     normalizer = Normalizer(fields=cont_channels)
     normalizer_state = "utils/resources/mortality_normalizer_with_interval.pkl"
     normalizer.load_params(normalizer_state)
@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
     """Model structure"""
     print("Constructing model ... ")
-    device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() == True else "cpu")
     print("available device: {}".format(device))
 
     if encoder._store_masks:
@@ -173,7 +173,8 @@ if __name__ == "__main__":
                 batch_y = batch_y[:, :400, :]
                 batch_interval = batch_interval[:, :400, :]
                       
-            output_step = batch_x.size()[1] // args.div
+            #output_step = batch_x.size()[1] // args.div
+            output_step = 1
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, output_step, device)
             output = output.mean(axis=1)
@@ -213,7 +214,8 @@ if __name__ == "__main__":
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
                 
-                output_step = valid_x.size()[1] // args.div
+                #output_step = valid_x.size()[1] // args.div
+                output_step = 1
                 valid_output, _ = model(valid_x, valid_interval, output_step, device)
                 valid_output = valid_output.mean(axis=1)
                 valid_loss = pos_weight * valid_y * torch.log(valid_output + 1e-7) + (

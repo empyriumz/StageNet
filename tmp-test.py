@@ -97,7 +97,7 @@ if __name__ == "__main__":
 
     """Model structure"""
     print("Loading model ... ")
-    device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
+    device = torch.device("cuda:2" if torch.cuda.is_available() == True else "cpu")
     print("available device: {}".format(device))
 
     if encoder._store_masks:
@@ -105,19 +105,18 @@ if __name__ == "__main__":
     else:
         input_dim = args.input_dim
 
+    file_name = 'saved_weights/model_1d_trial_1_0.8455'
+    checkpoint = torch.load(file_name) 
     model = StageNet(
         input_dim,
         args.hidden_dim,
-        args.K,
+        checkpoint['params']['conv_size'],
         args.output_dim,
-        args.chunk_level,
+        checkpoint['params']['chunk_level'],
         args.dropconnect_rate,
         args.dropout_rate,
         args.dropres_rate,
     ).to(device)
-    
-    file_name = 'saved_weights/test-weight'
-    checkpoint = torch.load(file_name) 
     saved_epoch = checkpoint['epoch']
     print("last saved model is epoch {}".format(saved_epoch))
     model.load_state_dict(checkpoint['net'])
@@ -145,7 +144,8 @@ if __name__ == "__main__":
                 test_y = test_y[:, :400, :]
                 test_interval = test_interval[:, :400, :]
             
-            output_step = test_x.size()[1] // args.div
+            #output_step = test_x.size()[1] // args.div
+            output_step = 1
             test_output, _ = model(test_x, test_interval, output_step, device)
             test_output = test_output.mean(axis=1)
             loss = test_y * torch.log(test_output + 1e-7) + (

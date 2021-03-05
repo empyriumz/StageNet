@@ -60,6 +60,7 @@ class BatchDataGenerator(object):
             # one-hot encode categorical variables and imputate missing data
             X, interval, _ = encoder.transform(X)
             interval = np.repeat(interval, 17).reshape(-1, 17)  
+            #interval = np.expand_dims(interval, axis=-1)
             X = np.hstack([X, interval])
             if normalizer is not None:
                 X = normalizer.transform(X)

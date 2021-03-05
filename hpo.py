@@ -157,7 +157,7 @@ def objective(trial):
                 batch_y = batch_y[:, :400, :]
                 batch_interval = batch_interval[:, :400, :]
                       
-            output_step = batch_x.size()[1] // 1
+            output_step = 1
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, output_step, device)
             output = output.mean(axis=1)
@@ -174,7 +174,7 @@ def objective(trial):
         print("Epoch: {}, Training loss = {:.6f}".format(epoch, epoch_loss))
         train_loss.append(epoch_loss)
 
-        print("\n==>Predicting on validation")
+        print("==>Predicting on validation")
         with torch.no_grad():
             model.eval()
             cur_val_loss = []
@@ -197,7 +197,7 @@ def objective(trial):
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
                 
-                output_step = valid_x.size()[1] // 1
+                output_step = 1
                 valid_output, _ = model(valid_x, valid_interval, output_step, device)
                 valid_output = valid_output.mean(axis=1)
                 valid_loss = pos_weight * valid_y * torch.log(valid_output + 1e-7) + (
@@ -220,18 +220,21 @@ def objective(trial):
             valid_pred = np.stack([1 - valid_pred, valid_pred], axis=1)
             ret = metrics.print_metrics_binary(valid_true, valid_pred, verbose=0)
             cur_auroc = ret["auroc"]
-            file_name = "./saved_weights/best_model_trial_{}".format(trial.number)
+            
             if cur_auroc > max_auroc:
                 max_auroc = cur_auroc
+                print("ROC AUC={:.6f}".format(max_auroc))
                 state = {
                     "net": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                     "epoch": epoch,
-                }
+                    "params": trial.params
+                }               
+                file_name = "./saved_weights/model_1d_trial_{}_{:.4f}".format(trial.number, max_auroc)
                 torch.save(state, file_name)
-                print("------------ Save the best model ------------")
-                
-            trial.report(cur_auroc, epoch)
+                print("  Params: ")
+                for key, value in trial.params.items():
+                    print(" {}: {}".format(key, value))
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
 
@@ -244,7 +247,7 @@ if __name__ == "__main__":
 
     """Model structure"""
     print("Constructing model ... ")
-    device = torch.device("cuda:0" if torch.cuda.is_available() == True else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() == True else "cpu")
     print("available device: {}".format(device))
 
     study = optuna.create_study(direction="maximize")
@@ -269,4 +272,4 @@ if __name__ == "__main__":
 
     print("  Params: ")
     for key, value in trial.params.items():
-        print("    {}: {}".format(key, value))
+        print(" {}: {}".format(key, value))
