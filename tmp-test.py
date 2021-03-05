@@ -34,9 +34,6 @@ def parse_arguments(parser):
     parser.add_argument(
         "--batch_size", type=int, default=256, help="Training batch size"
     )
-    parser.add_argument("--epochs", type=int, default=10, help="Training epochs")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learing rate")
-
     parser.add_argument(
         "--input_dim", type=int, default=59, help="Dimension of visit record data"
     )
@@ -87,7 +84,7 @@ if __name__ == "__main__":
     ]
 
     normalizer = Normalizer(fields=cont_channels)
-    normalizer_state = "utils/resources/mortality_normalizer.pkl"
+    normalizer_state = "utils/resources/mortality_normalizer_with_interval.pkl"
     normalizer.load_params(normalizer_state)
 
     test_data_gen = utils.BatchDataGenerator(
@@ -119,16 +116,13 @@ if __name__ == "__main__":
         args.dropres_rate,
     ).to(device)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-
-    file_name = 'saved_weights/test-normalizer-full'
+    file_name = 'saved_weights/test-weight'
     checkpoint = torch.load(file_name) 
     saved_epoch = checkpoint['epoch']
     print("last saved model is epoch {}".format(saved_epoch))
     model.load_state_dict(checkpoint['net'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-
     print("\n==>Predicting on test dataset")
+    
     with torch.no_grad():
         model.eval()
         test_loss = []
@@ -137,25 +131,20 @@ if __name__ == "__main__":
         for each_batch in range(test_data_gen.steps):
             test_data = next(test_data_gen)
             test_data = test_data["data"]
-            test_x = torch.tensor(test_data[0][0], dtype=torch.float32).to(device)
-            test_y = torch.tensor(test_data[1], dtype=torch.float32).to(device)
-            tmp = torch.zeros(test_x.size(0), 17, dtype=torch.float32).to(device)
-            test_interval = torch.zeros(
-                (test_x.size(0), test_x.size(1), 17), dtype=torch.float32
-            ).to(device)
-
-            for i in range(test_x.size(1)):
-                cur_ind = test_x[:, i, -17:]
-                tmp += (cur_ind == 0).float()
-                test_interval[:, i, :] = cur_ind * tmp
-                tmp[cur_ind == 1] = 0
-
+            test_x = test_data[0]
+            test_y = test_data[1]
+            test_interval = test_x[:, :, -17:]  
+            test_x = test_x[:, :, :-17]
+            
+            test_x = torch.tensor(test_x, dtype=torch.float32).to(device)
+            test_y = torch.tensor(test_y, dtype=torch.float32).to(device)
+            test_interval = torch.tensor(test_interval, dtype=torch.float32).to(device)
+                      
             if test_x.size()[1] > 400:
                 test_x = test_x[:, :400, :]
                 test_y = test_y[:, :400, :]
                 test_interval = test_interval[:, :400, :]
             
-            test_y = test_y[:, 0, :]
             output_step = test_x.size()[1] // args.div
             test_output, _ = model(test_x, test_interval, output_step, device)
             test_output = test_output.mean(axis=1)
@@ -178,4 +167,3 @@ if __name__ == "__main__":
         test_pred = np.array(test_pred)
         test_pred = np.stack([1 - test_pred, test_pred], axis=1)
         metrics.print_metrics_binary(test_true, test_pred)
-       
