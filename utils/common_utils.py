@@ -58,10 +58,12 @@ class MortalityDataLoader:
             cur_X = self._read_timeseries(cur_stay)
             mas["X"].append(cur_X)
             mas["y"].append(y_labels)
-            if small_part and len(mas["y"]) == 256:
+            if small_part and len(mas["y"]) == 1024:
                 break
 
         self._data = mas
+        # weight is the ratio of (# of neg / # of pos) samples
+        self.pos_weight = (len(mas["y"]) - sum(mas["y"])) / sum(mas["y"])
 
     def _read_timeseries(self, ts_filename):
         ret = []

@@ -32,12 +32,12 @@ def parse_arguments(parser):
         "--file_name", type=str, metavar="<data_path>", help="File name to save model"
     )
     parser.add_argument(
-        "--small_part", type=int, default=0, help="Use part of training data"
+        "--small_part", "-s", type=bool, default=False, help="Use part of training data"
     )
     parser.add_argument(
         "--batch_size", type=int, default=256, help="Training batch size"
     )
-    parser.add_argument("--epochs", type=int, default=20, help="Training epochs")
+    parser.add_argument("--epochs", "-e", type=int, default=20, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.001, help="Learing rate")
 
     parser.add_argument(
@@ -77,11 +77,15 @@ if __name__ == "__main__":
     print("Preparing training data ... ")
     train_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-mortality.csv"),
+        listfile=os.path.join(args.data_path, "train-mortality.csv"),
+        small_part=args.small_part,
     )
+    pos_weight = train_data_loader.pos_weight
+    
     val_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
-        listfile=os.path.join(args.data_path, "demo-mortality-val.csv"),
+        listfile=os.path.join(args.data_path, "val-mortality.csv"),
+        small_part=args.small_part,
     )
     encoder = OneHotEncoder(
         store_masks=False,
@@ -173,8 +177,7 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, output_step, device)
             output = output.mean(axis=1)
-            #TODO: adding weight to the loss function
-            loss = batch_y * torch.log(output + 1e-7) + (1 - batch_y) * torch.log(
+            loss = pos_weight * batch_y * torch.log(output + 1e-7) + (1 - batch_y) * torch.log(
                 1 - output + 1e-7
             )
             loss = torch.neg(torch.sum(loss)) / batch_x.size()[0]
@@ -213,7 +216,7 @@ if __name__ == "__main__":
                 output_step = valid_x.size()[1] // args.div
                 valid_output, _ = model(valid_x, valid_interval, output_step, device)
                 valid_output = valid_output.mean(axis=1)
-                valid_loss = valid_y * torch.log(valid_output + 1e-7) + (
+                valid_loss = pos_weight * valid_y * torch.log(valid_output + 1e-7) + (
                     1 - valid_y
                 ) * torch.log(1 - valid_output + 1e-7)
                 valid_loss = torch.neg(torch.sum(valid_loss)) / valid_x.size()[0]
