@@ -105,7 +105,7 @@ if __name__ == "__main__":
     else:
         input_dim = args.input_dim
 
-    file_name = 'saved_weights/model_1d_trial_1_0.8455'
+    file_name = 'saved_weights/model_1d_trial_32_0.8522'
     checkpoint = torch.load(file_name) 
     model = StageNet(
         input_dim,

@@ -38,7 +38,7 @@ def parse_arguments(parser):
         "--batch_size", type=int, default=256, help="Training batch size"
     )
     parser.add_argument("--epochs", "-e", type=int, default=20, help="Training epochs")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learing rate")
+    parser.add_argument("--lr", type=float, default=0.0015, help="Learing rate")
 
     parser.add_argument(
         "--input_dim", type=int, default=59, help="Dimension of visit record data"
@@ -59,17 +59,17 @@ def parse_arguments(parser):
         default=0.3,
         help="Dropout rate in residue connection",
     )
-    parser.add_argument("--K", type=int, default=10, help="1D-conv filter size")   
+    parser.add_argument("--K", type=int, default=13, help="1D-conv filter size")   
     parser.add_argument(
-        "--chunk_level", type=int, default=3, help="Value controlling the coarse grain level"
+        "--chunk_level", type=int, default=6, help="Value controlling the coarse grain level"
     )
-    parser.add_argument("--div", type=int, default=1, help="divide the input time step to get output time step")
-
     args = parser.parse_args()
     return args
 
 
 if __name__ == "__main__":
+    import time
+    start_time = time.time()
     parser = argparse.ArgumentParser()
     args = parse_arguments(parser)
 
@@ -173,7 +173,6 @@ if __name__ == "__main__":
                 batch_y = batch_y[:, :400, :]
                 batch_interval = batch_interval[:, :400, :]
                       
-            #output_step = batch_x.size()[1] // args.div
             output_step = 1
             optimizer.zero_grad()
             output, _ = model(batch_x, batch_interval, output_step, device)
@@ -214,7 +213,6 @@ if __name__ == "__main__":
                     valid_y = valid_y[:, :400, :]
                     valid_interval = valid_interval[:, :400, :]
                 
-                #output_step = valid_x.size()[1] // args.div
                 output_step = 1
                 valid_output, _ = model(valid_x, valid_interval, output_step, device)
                 valid_output = valid_output.mean(axis=1)
@@ -247,3 +245,5 @@ if __name__ == "__main__":
                 }
                 torch.save(state, file_name)
                 print("\n------------ Save the best model ------------\n")
+    end_time = time.time()
+    print("total used time = {}".format(end_time - start_time))
