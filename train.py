@@ -139,7 +139,8 @@ if __name__ == "__main__":
         args.dropres_rate,
     ).to(device)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-3, lr=args.lr)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     """Train phase"""
     print("Start training ... ")

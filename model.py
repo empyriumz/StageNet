@@ -51,6 +51,7 @@ class StageNet(nn.Module):
             self.nn_dropconnect_r = nn.Dropout(p=dropconnect)
         if self.dropout:
             self.nn_dropout = nn.Dropout(p=dropout)
+        if self.dropres:
             self.nn_dropres = nn.Dropout(p=dropres)
 
     def cumax(self, x, mode="l2r"):

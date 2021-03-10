@@ -105,17 +105,17 @@ if __name__ == "__main__":
     else:
         input_dim = args.input_dim
 
-    file_name = 'saved_weights/model_1d_trial_32_0.8522'
+    file_name = './saved_weights/model_trial_26_0.8555'
     checkpoint = torch.load(file_name) 
     model = StageNet(
         input_dim,
         args.hidden_dim,
         checkpoint['params']['conv_size'],
         args.output_dim,
-        checkpoint['params']['chunk_level'],
-        args.dropconnect_rate,
-        args.dropout_rate,
-        args.dropres_rate,
+        6,
+        checkpoint['params']['dropconnect_rate'],
+        checkpoint['params']['dropout_rate'],
+        checkpoint['params']['dropres_rate'],
     ).to(device)
     saved_epoch = checkpoint['epoch']
     print("last saved model is epoch {}".format(saved_epoch))
@@ -144,7 +144,6 @@ if __name__ == "__main__":
                 test_y = test_y[:, :400, :]
                 test_interval = test_interval[:, :400, :]
             
-            #output_step = test_x.size()[1] // args.div
             output_step = 1
             test_output, _ = model(test_x, test_interval, output_step, device)
             test_output = test_output.mean(axis=1)

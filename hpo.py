@@ -119,11 +119,12 @@ def objective(trial):
     # conv_size = trial.suggest_int("conv_size", 1, 16)
     # chunk_level =  trial.suggest_categorical("chunk_level", [1, 3, 6, 12])
     lr = trial.suggest_float("lr", 5e-4, 5e-3, log=True)
-    conv_size = 13
+    conv_size = trial.suggest_categorical("conv_size", [12, 13])
     chunk_level = 6
     dropconnect_rate = trial.suggest_categorical("dropconnect_rate", [0, 0.25, 0.5])
     dropout_rate = trial.suggest_categorical("dropout_rate", [0, 0.25, 0.5])
     dropres_rate = trial.suggest_categorical("dropres_rate", [0, 0.1, 0.3, 0.5])
+    weight_decay = trial.suggest_categorical("weight_decay", [0, 1e-5, 1e-4, 1e-3])
     model = StageNet(
         args.input_dim,
         args.hidden_dim,
@@ -135,7 +136,7 @@ def objective(trial):
         dropres_rate,
     ).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), weight_decay=weight_decay, lr=lr)
     """Train phase"""
     print("Start training ... ")
 
@@ -243,7 +244,7 @@ def objective(trial):
                     "epoch": epoch,
                     "params": trial.params,
                 }
-                file_name = "./saved_weights/model_1d_fine_tune_trial_{}_{:.4f}".format(
+                file_name = "./saved_weights/model_trial_{}_{:.4f}".format(
                     trial.number, max_auroc
                 )
                 torch.save(state, file_name)
