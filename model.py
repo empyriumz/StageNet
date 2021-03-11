@@ -40,7 +40,6 @@ class StageNet(nn.Module):
         )
         nn.init.orthogonal_(self.recurrent_kernel.weight)
         nn.init.zeros_(self.recurrent_kernel.bias)
-
         self.nn_scale = nn.Linear(int(hidden_dim), int(hidden_dim // 6))
         self.nn_rescale = nn.Linear(int(hidden_dim // 6), int(hidden_dim))
         self.nn_conv = nn.Conv1d(int(hidden_dim), int(self.conv_dim), int(conv_size), 1)
@@ -148,7 +147,8 @@ class StageNet(nn.Module):
         rnn_outputs = torch.stack(h).permute(1, 0, 2)
         if self.dropres > 0.0:
             origin_h = self.nn_dropres(origin_h)
-        rnn_outputs = (rnn_outputs + origin_h)[:, -output_step:, :]
+        #rnn_outputs = (rnn_outputs + origin_h)[:, -output_step:, :]
+        rnn_outputs = rnn_outputs[:, -output_step:, :]
         rnn_outputs = rnn_outputs.contiguous().view(-1, rnn_outputs.size(-1))
         if self.dropout > 0.0:
             rnn_outputs = self.nn_dropout(rnn_outputs)

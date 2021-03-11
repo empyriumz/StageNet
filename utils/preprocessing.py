@@ -126,7 +126,9 @@ class OneHotEncoder:
 
                 write(data, i, channel, row[j])
                 original_value[i][channel_id] = row[j]
-
+        
+        #TODO: Use mask * time to compute the interval for each variable
+        
         # impute missing values
         if self._impute_strategy not in ["zero", "normal_value", "previous", "next"]:
             raise ValueError("impute strategy is invalid")

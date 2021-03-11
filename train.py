@@ -19,6 +19,7 @@ from utils import metrics
 from utils import common_utils
 from model import StageNet
 
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 def parse_arguments(parser):
     parser.add_argument(
@@ -39,7 +40,9 @@ def parse_arguments(parser):
     )
     parser.add_argument("--epochs", "-e", type=int, default=20, help="Training epochs")
     parser.add_argument("--lr", type=float, default=0.0015, help="Learing rate")
-
+    parser.add_argument(
+        "--weight_decay", type=float, default=0, help="Value controlling the coarse grain level"
+    )
     parser.add_argument(
         "--input_dim", type=int, default=59, help="Dimension of visit record data"
     )
@@ -59,9 +62,12 @@ def parse_arguments(parser):
         default=0.3,
         help="Dropout rate in residue connection",
     )
-    parser.add_argument("--K", type=int, default=13, help="1D-conv filter size")   
+    parser.add_argument("--conv_size", type=int, default=13, help="1D-conv filter size")   
     parser.add_argument(
         "--chunk_level", type=int, default=6, help="Value controlling the coarse grain level"
+    )
+    parser.add_argument(
+        "--store_masks", type=bool, default=False, help="including mask as input"
     )
     args = parser.parse_args()
     return args
@@ -80,7 +86,7 @@ if __name__ == "__main__":
         listfile=os.path.join(args.data_path, "train-mortality.csv"),
         small_part=args.small_part,
     )
-    pos_weight = train_data_loader.pos_weight
+    pos_weight = torch.sqrt(torch.tensor(train_data_loader.pos_weight, dtype=torch.float32))
     
     val_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
@@ -88,7 +94,7 @@ if __name__ == "__main__":
         small_part=args.small_part,
     )
     encoder = OneHotEncoder(
-        store_masks=False,
+        store_masks=args.store_masks,
         impute_strategy="previous",
         start_time="zero",
     )
@@ -127,21 +133,21 @@ if __name__ == "__main__":
         input_dim = args.input_dim + 17
     else:
         input_dim = args.input_dim
-
+    model_params = vars(args)  
+    model_params["input_dim"] = input_dim
     model = StageNet(
-        input_dim,
-        args.hidden_dim,
-        args.K,
-        args.output_dim,
-        args.chunk_level,
-        args.dropconnect_rate,
-        args.dropout_rate,
-        args.dropres_rate,
+        model_params["input_dim"],
+        model_params["hidden_dim"],
+        model_params["conv_size"],
+        model_params["output_dim"],
+        model_params["chunk_level"],
+        model_params["dropconnect_rate"],
+        model_params["dropout_rate"],
+        model_params["dropres_rate"],
     ).to(device)
     
-    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-3, lr=args.lr)
-    #optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-
+    optimizer = torch.optim.Adam(model.parameters(), weight_decay=args.weight_decay, lr=args.lr)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.1)
     """Train phase"""
     print("Start training ... ")
 
@@ -229,9 +235,10 @@ if __name__ == "__main__":
                 ):
                     valid_true.append(t)
                     valid_pred.append(p)
-
-            val_loss = np.mean(np.array(cur_val_loss))
-            print("Validation loss = {:.6f}".format(val_loss))
+            cur_val_loss = np.mean(np.array(cur_val_loss))          
+            scheduler.step(cur_val_loss)
+            print("Validation loss = {:.6f}".format(cur_val_loss))
+            val_loss.append(cur_val_loss)
             print("\n")
             valid_pred = np.array(valid_pred)
             valid_pred = np.stack([1 - valid_pred, valid_pred], axis=1)
@@ -243,6 +250,9 @@ if __name__ == "__main__":
                     "net": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                     "epoch": epoch,
+                    "params": model_params,
+                    "train_loss": train_loss,
+                    "val_loss": val_loss
                 }
                 torch.save(state, file_name)
                 print("\n------------ Save the best model ------------\n")

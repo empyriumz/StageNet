@@ -53,12 +53,10 @@ def parse_arguments(parser):
         default=0.3,
         help="Dropout rate in residue connection",
     )
-    parser.add_argument("--K", type=int, default=10, help="1D-conv filter size")   
+    parser.add_argument("--conv_size", type=int, default=10, help="1D-conv filter size")   
     parser.add_argument(
         "--chunk_level", type=int, default=3, help="Value controlling the coarse grain level"
     )
-    parser.add_argument("--div", type=int, default=2, help="divide the input time step to get output time step")
-
     args = parser.parse_args()
     return args
 

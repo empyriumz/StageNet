@@ -18,6 +18,7 @@ from utils import metrics
 from model import StageNet
 from utils.preprocessing import OneHotEncoder, Normalizer
 from utils import common_utils
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 import optuna
 
@@ -37,34 +38,7 @@ def parse_arguments(parser):
     )
     parser.add_argument(
         "--batch_size", type=int, default=256, help="Training batch size"
-    )
-    parser.add_argument(
-        "--input_dim", type=int, default=59, help="Dimension of visit record data"
-    )
-    parser.add_argument(
-        "--hidden_dim", type=int, default=384, help="Dimension of hidden units in RNN"
-    )
-    parser.add_argument(
-        "--output_dim", type=int, default=1, help="Dimension of prediction target"
-    )
-    parser.add_argument("--dropout_rate", type=float, default=0.5, help="Dropout rate")
-    parser.add_argument(
-        "--dropconnect_rate", type=float, default=0.5, help="Dropout rate in RNN"
-    )
-    parser.add_argument(
-        "--dropres_rate",
-        type=float,
-        default=0.3,
-        help="Dropout rate in residue connection",
-    )
-
-    parser.add_argument(
-        "--div",
-        type=int,
-        default=1,
-        help="divide the input time step to get output time step",
-    )
-
+    )  
     args = parser.parse_args()
     return args
 
@@ -79,8 +53,8 @@ def objective(trial):
         small_part=args.small_part,
     )
 
-    pos_weight = train_data_loader.pos_weight
-
+    #pos_weight = train_data_loader.pos_weight
+    pos_weight = np.sqrt(train_data_loader.pos_weight)
     val_data_loader = common_utils.MortalityDataLoader(
         dataset_dir=os.path.join(args.data_path, "train"),
         listfile=os.path.join(args.data_path, "val-mortality.csv"),
@@ -94,7 +68,7 @@ def objective(trial):
     )
 
     encoder_header = encoder.create_header().split(",")
-    # select non-categorical channels
+    # select non-categorical channels for normalization
     cont_channels = [i for (i, x) in enumerate(encoder_header) if x.find("->") == -1]
     # cont_channels = cont_channels + list(range(59,76))
     normalizer = Normalizer(fields=cont_channels)
@@ -115,21 +89,21 @@ def objective(trial):
         args.batch_size,
         shuffle=False,
     )
-
-    # conv_size = trial.suggest_int("conv_size", 1, 16)
-    # chunk_level =  trial.suggest_categorical("chunk_level", [1, 3, 6, 12])
-    lr = trial.suggest_float("lr", 5e-4, 5e-3, log=True)
-    conv_size = trial.suggest_categorical("conv_size", [12, 13])
-    chunk_level = 6
-    dropconnect_rate = trial.suggest_categorical("dropconnect_rate", [0, 0.25, 0.5])
-    dropout_rate = trial.suggest_categorical("dropout_rate", [0, 0.25, 0.5])
-    dropres_rate = trial.suggest_categorical("dropres_rate", [0, 0.1, 0.3, 0.5])
+    output_dim = 1
+    input_dim = 59
+    conv_size = trial.suggest_int("conv_size", 9, 15)
+    chunk_level =  trial.suggest_categorical("chunk_level", [2, 3, 4, 6, 8, 12])
+    hidden_dim = trial.suggest_categorical("hidden_dim", [384, 576])
+    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    dropconnect_rate = trial.suggest_categorical("dropconnect_rate", [0, 0.5])
+    dropout_rate = trial.suggest_categorical("dropout_rate", [0, 0.5])
+    dropres_rate = trial.suggest_categorical("dropres_rate", [0, 0.5])
     weight_decay = trial.suggest_categorical("weight_decay", [0, 1e-5, 1e-4, 1e-3])
     model = StageNet(
-        args.input_dim,
-        args.hidden_dim,
+        input_dim,
+        hidden_dim,
         conv_size,
-        args.output_dim,
+        output_dim,
         chunk_level,
         dropconnect_rate,
         dropout_rate,
@@ -137,6 +111,7 @@ def objective(trial):
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=weight_decay, lr=lr)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=2, factor=0.2)
     """Train phase"""
     print("Start training ... ")
 
@@ -226,15 +201,16 @@ def objective(trial):
                 ):
                     valid_true.append(t)
                     valid_pred.append(p)
-
-            val_loss = np.mean(np.array(cur_val_loss))
-            print("Validation loss = {:.6f}".format(val_loss))
+            cur_val_loss = np.mean(np.array(cur_val_loss))           
+            scheduler.step(cur_val_loss)
+            print("Validation loss = {:.6f}".format(cur_val_loss))
+            val_loss.append(cur_val_loss)
             print("\n")
             valid_pred = np.array(valid_pred)
             valid_pred = np.stack([1 - valid_pred, valid_pred], axis=1)
             ret = metrics.print_metrics_binary(valid_true, valid_pred, verbose=0)
             cur_auroc = ret["auroc"]
-
+            
             if cur_auroc > max_auroc:
                 max_auroc = cur_auroc
                 print("ROC AUC={:.6f}".format(max_auroc))
@@ -243,14 +219,18 @@ def objective(trial):
                     "optimizer": optimizer.state_dict(),
                     "epoch": epoch,
                     "params": trial.params,
+                    "train_loss": train_loss,
+                    "val_loss": val_loss
                 }
-                file_name = "./saved_weights/model_trial_{}_{:.4f}".format(
+                file_name = "./saved_weights/model_trial_no_origin_h_and_mask_{}_{:.4f}".format(
                     trial.number, max_auroc
                 )
                 torch.save(state, file_name)
                 print("  Params: ")
                 for key, value in trial.params.items():
                     print(" {}: {}".format(key, value))
+            
+            trial.report(cur_auroc, epoch)
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
 
